@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ball Brawler Sim</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app-container">
+        
+        <!-- Skill Tree Panel (Left Side) -->
+        <div id="skill-tree-panel">
+            <h2>Skill Tree</h2>
+            <div class="stat-group">
+                <p><strong>EV Points:</strong> <span id="ui-ev-points" style="color: #FFDC00; font-size: 18px;">0</span></p>
+                <p><strong>Equipped:</strong> <span id="ui-equipped-slots">0 / 3</span></p>
+            </div>
+            <p class="helper-text">Drag to pan. Click to unlock/equip.</p>
+            <hr>
+            
+            <!-- Interactive Pan-able Tree Viewport -->
+            <div id="tree-viewport">
+                <div id="tree-canvas">
+                    <!-- SVG lines injected here via JS -->
+                    <svg id="tree-lines"></svg>
+                    <!-- Nodes injected here via JS -->
+                    <div id="tree-nodes"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Area (Center) -->
+        <div id="game-container">
+            <canvas id="gameCanvas" width="1200" height="800"></canvas>
+            
+            <!-- UI Overlay for Menus -->
+            <div id="ui-layer">
+                <!-- Race Selection -->
+                <div id="race-selection" class="modal hidden">
+                    <h2>Select Your Race</h2>
+                    <div id="race-options" class="options-container"></div>
+                </div>
+
+                <!-- Upgrade Selection -->
+                <div id="upgrade-selection" class="modal hidden">
+                    <h2>Victory! Choose an Upgrade</h2>
+                    <div id="upgrade-options" class="options-container"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile Panel (Right Side) -->
+        <div id="profile-panel">
+            <h2>Player Profile</h2>
+            <div class="stat-group">
+                <p><strong>Race:</strong> <span id="ui-race">-</span></p>
+                <p><strong>Style:</strong> <span id="ui-style">-</span></p>
+            </div>
+            <hr>
+            <div class="stat-group">
+                <p><strong>HP:</strong> <span id="ui-hp">- / -</span></p>
+                <div class="health-bar-bg">
+                    <div id="ui-hp-fill" class="health-bar-fill"></div>
+                </div>
+            </div>
+            <div class="stat-group">
+                <p><strong>KI:</strong> <span id="ui-ki">- / -</span></p>
+                <div class="health-bar-bg">
+                    <div id="ui-ki-fill" class="ki-bar-fill"></div>
+                </div>
+            </div>
+            <hr>
+            <div class="stat-group">
+                <p><strong>Strength:</strong> <span id="ui-dmg">-</span></p>
+                <p><strong>Speed:</strong> <span id="ui-spd">-</span></p>
+                <p><strong>Knockback:</strong> <span id="ui-kb">-</span></p>
+                <p><strong>Block CD:</strong> <span id="ui-block">-</span></p>
+            </div>
+            <div id="combat-log">
+                <p>Survive and overcome!</p>
+            </div>
+        </div>
+
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>
