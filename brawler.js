@@ -1,3 +1,5 @@
+
+
 import { Vector } from './vector.js';
 import { RACES } from './races.js';
 import { AfterImage } from './particle.js';
@@ -140,7 +142,7 @@ export class Brawler {
         this.tpRequests =[]; 
 
         // TAIL SYSTEM
-        this.hasTail = ['Bio-Android', 'Saiyan', 'Half-Saiyan'].includes(this.raceName);
+        this.hasTail =['Bio-Android', 'Saiyan', 'Half-Saiyan'].includes(this.raceName);
         this.tail =[];
         this.numTailSegments = this.raceName === 'Bio-Android' ? 10 : 7;
         this.tailMaxDist = this.raceName === 'Bio-Android' ? 12 : 8;
@@ -319,7 +321,8 @@ export class Brawler {
         return wallForce;
     }
 
-    getSteering(opponent, canvasWidth, canvasHeight, projectiles) {
+    // UPDATE: Passed obstacles array for pathing logic
+    getSteering(opponent, canvasWidth, canvasHeight, projectiles, obstacles) {
         if (this.stunTimer > 0) return new Vector(0, 0);
         
         let isLocked = this.beamTimer > 0 || this.chokeTimer > 0 || this.barrageTimer > 0 || 
@@ -365,10 +368,23 @@ export class Brawler {
             this.wantsToRetreat = false; 
         }
 
+        // --- NEW: Obstacle Avoidance AI ---
+        if (obstacles) {
+            obstacles.forEach(obs => {
+                if (obs.falling || obs.isDead) return;
+                let distToObs = Vector.dist(this.pos, obs.pos);
+                let avoidRadius = this.radius + obs.radius + 40; 
+                if (distToObs < avoidRadius) {
+                    let force = avoidRadius - distToObs;
+                    let pushAway = Vector.sub(this.pos, obs.pos).normalize().mult(force * 0.2);
+                    steer.add(pushAway);
+                }
+            });
+        }
+
         if (this.wantsToRetreat) {
             if (dist > 350) {
                 this.isCharging = true; 
-                return new Vector(0, 0); 
             } else {
                 this.isCharging = false;
                 let desired = toOpp.copy().mult(-1).normalize().mult(currentSpeed);
@@ -376,13 +392,12 @@ export class Brawler {
                 steer.add(this.avoidBorders(canvasWidth, canvasHeight, currentSpeed));
                 return steer.limit(this.maxForce);
             }
-        }
-
-        if (this.isCharging) {
+        } else if (this.isCharging) {
             if (this.ki >= this.maxKi || isThreat) {
                 this.isCharging = false;
             } else {
-                return new Vector(0, 0); 
+                steer.add(this.avoidBorders(canvasWidth, canvasHeight, currentSpeed));
+                return steer.limit(this.maxForce); 
             }
         }
 
@@ -400,7 +415,7 @@ export class Brawler {
                 
                 this.triggerTeleport(tpTarget);
                 this.lookTarget = opponent.pos.copy();
-                return new Vector(0, 0);
+                return steer; // Return current small steer to avoid skipping frame forces
             }
         }
 
@@ -432,7 +447,7 @@ export class Brawler {
                 this.dragonThrowCd = 500;
                 this.dragonThrowTarget = opponent;
                 this.attackLockout = 60;
-                return new Vector(0,0);
+                return steer;
             }
 
             // STR: Choke
@@ -441,7 +456,7 @@ export class Brawler {
                 this.chokeCd = 400;
                 this.chokedTarget = opponent;
                 this.attackLockout = 50;
-                return new Vector(0,0);
+                return steer;
             }
 
             // SPD: Wolf Rush
@@ -450,7 +465,7 @@ export class Brawler {
                 this.wolfRushCd = 500;
                 this.wolfRushTarget = opponent;
                 this.attackLockout = 80;
-                return new Vector(0,0);
+                return steer;
             }
 
             // SPD: Barrage
@@ -468,7 +483,7 @@ export class Brawler {
                         maxExt: 50 + Math.random() * 40
                     });
                 }
-                return new Vector(0,0);
+                return steer;
             }
 
             // KI: Beam
@@ -476,7 +491,7 @@ export class Brawler {
                 let beamChance = dist > 250 ? 0.015 : 0.005; 
                 if (Math.random() < beamChance) {
                     this.wantsToBeam = true;
-                    return new Vector(0, 0); 
+                    return steer; 
                 }
             }
             
@@ -486,7 +501,7 @@ export class Brawler {
                     this.kiBallCd = 360;
                     this.ki -= 60;
                     this.wantsToKiBall = true;
-                    return new Vector(0,0);
+                    return steer;
                 }
             }
 
@@ -496,7 +511,7 @@ export class Brawler {
                     this.grenadeCd = 240;
                     this.ki -= 40;
                     this.wantsToGrenade = true;
-                    return new Vector(0,0);
+                    return steer;
                 }
             }
             
@@ -506,13 +521,12 @@ export class Brawler {
                     this.kiArrowsCd = 200;
                     this.ki -= 30;
                     this.wantsToKiArrows = true;
-                    return new Vector(0,0);
+                    return steer;
                 }
             }
 
             if (this.ki < 40 && dist > 300 && Math.random() < 0.05) {
                 this.isCharging = true;
-                return new Vector(0, 0);
             } 
             else if (this.ki >= 15 && dist > 180 && Math.random() < 0.03 && this.attackLockout <= 0) {
                 this.wantsToShoot = true;
@@ -612,7 +626,6 @@ export class Brawler {
                     if (this.raceName === 'Bio-Android') {
                         wave = new Vector(-this.lookDir.y, this.lookDir.x).mult(Math.sin(Date.now() * 0.005 + i * 0.5) * 5);
                     } else {
-                        // Saiyan monkey tail - curling swaying motion
                         let sway = Math.sin(Date.now() * 0.003 - i * 0.6) * 4;
                         wave = new Vector(-this.lookDir.y, this.lookDir.x).mult(sway);
                     }

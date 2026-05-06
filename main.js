@@ -1,7 +1,10 @@
+
+
 import { Vector } from './vector.js';
 import { Brawler } from './brawler.js';
 import { RACES, getRandomRaces } from './races.js';
 import { Particle, TeleportLine, KiBlast, HomingKiBlast, KiBall, KiGrenade, EnergyBeam } from './particle.js';
+import { Arena } from './arena.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -22,6 +25,8 @@ let homingBlasts =[];
 let kiBalls =[];
 let kiGrenades =[];
 let beams =[];
+
+let currentArena = new Arena('Desert', width, height);
 
 let playerSelectedRace = null;
 
@@ -373,6 +378,7 @@ function startGame() {
     kiBalls =[];
     kiGrenades =[];
     beams =[];
+    currentArena.generate();
     spawnPlayer();
     spawnEnemy();
     updateProfileUI();
@@ -387,6 +393,8 @@ function spawnPlayer() {
 }
 
 function spawnEnemy() {
+    currentArena.generate(); 
+    
     let color = ENEMY_COLORS[Math.floor(Math.random() * ENEMY_COLORS.length)];
     let style = STYLES[Math.floor(Math.random() * STYLES.length)];
     let allRaces = Object.keys(RACES);
@@ -434,24 +442,6 @@ function spawnExplosion(x, y, color, count, speedMult = 1) {
 function spawnTeleportLines(x, y, color) {
     for(let i = 0; i < 8; i++) {
         particles.push(new TeleportLine(x, y, color));
-    }
-}
-
-function drawArena() {
-    ctx.fillStyle = '#222';
-    ctx.fillRect(0, 0, width, height);
-
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(width / 2, height / 2, 150, 0, Math.PI * 2);
-    ctx.stroke();
-    
-    if (blueBrawler && enemyBrawler) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.font = 'bold 80px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(`SCORE: ${score}`, width / 2, height / 2 + 30);
     }
 }
 
@@ -715,6 +705,94 @@ function getSegmentIntersection(p0, p1, p2, p3) {
     return null;
 }
 
+function checkObstacleCollisions() {
+    let activeBrawlers = [blueBrawler, enemyBrawler].filter(b => !b.isDead);
+    
+    // Brawler against Obstacles
+    activeBrawlers.forEach(b => {
+        currentArena.obstacles.forEach(obs => {
+            if (obs.isDead || obs.falling) return;
+            
+            let dist = Vector.dist(b.pos, obs.pos);
+            let minDist = b.radius + obs.radius;
+            
+            if (dist < minDist) {
+                let overlap = minDist - dist;
+                let pushDir = Vector.sub(b.pos, obs.pos).normalize();
+
+                // If Brawler hits it hard (knockback state)
+                if (b.vel.mag() > 8) {
+                    obs.takeDamage(b.vel.mag() * 1.5, b.vel);
+                    
+                    // Fixed: Only apply collision damage to brawler if they were stunned/thrown
+                    // This guarantees they can't kill themselves by simply dashing into rocks!
+                    if (b.stunTimer > 0) {
+                        let envDamage = b.vel.mag() * 0.2;
+                        // Cap health drop so the environment cannot deal the lethal blow directly
+                        b.health = Math.max(1, b.health - envDamage);
+                        logCombat(`${b.isPlayer ? 'Player' : 'Enemy'} crashed into a ${obs.type}!`);
+                    }
+
+                    spawnExplosion(b.pos.x, b.pos.y, '#AAAAAA', 5, 1);
+                    screenShake = Math.max(screenShake, 5);
+                    
+                    b.vel.mult(-0.3); // Bounce off the obstacle
+                } else {
+                    // Normal physical push
+                    if (obs.isStatic) {
+                        b.pos.add(pushDir.copy().mult(overlap));
+                    } else {
+                        b.pos.add(pushDir.copy().mult(overlap * 0.5));
+                        obs.pos.sub(pushDir.copy().mult(overlap * 0.5));
+                        obs.vel.sub(pushDir.copy().mult(0.5));
+                    }
+                }
+            }
+        });
+    });
+
+    // Projectiles against Obstacles
+    let allProjectiles =[...kiBlasts, ...homingBlasts, ...kiBalls, ...kiGrenades];
+    
+    allProjectiles.forEach(p => {
+        if (!p.active && !(p instanceof KiGrenade && !p.detonating)) return;
+
+        currentArena.obstacles.forEach(obs => {
+            if (obs.isDead || obs.falling) return;
+            let dist = Vector.dist(p.pos, obs.pos);
+            
+            if (dist < obs.radius + p.radius) {
+                if (p instanceof KiBlast || p instanceof HomingKiBlast) {
+                    p.life = 0; // Destroy projectile
+                    obs.takeDamage(10, p.vel);
+                    spawnExplosion(p.pos.x, p.pos.y, p.color, 4, 0.5);
+                } else if (p instanceof KiBall) {
+                    p.life = 0;
+                    obs.takeDamage(50, p.vel);
+                    spawnExplosion(p.pos.x, p.pos.y, p.color, 20, 2);
+                    screenShake = Math.max(screenShake, 10);
+                } else if (p instanceof KiGrenade) {
+                    p.detonating = true;
+                    p.vel.mult(0);
+                }
+            }
+        });
+    });
+
+    // Beams against obstacles
+    beams.forEach(beam => {
+        if (!beam.active) return;
+        currentArena.obstacles.forEach(obs => {
+            if (obs.isDead || obs.falling) return;
+            let dummyTarget = { pos: obs.pos, radius: obs.radius };
+            if (beam.checkCollision(dummyTarget)) {
+                obs.takeDamage(2, beam.brawler.lookDir.copy().mult(5)); // Sustained damage
+                spawnExplosion(obs.pos.x, obs.pos.y, beam.color, 1, 0.5);
+            }
+        });
+    });
+}
+
 function updateGameLogic() {
     if (!isPlaying) return;
 
@@ -722,6 +800,8 @@ function updateGameLogic() {
         hitStopFrames--;
         return; 
     }
+
+    currentArena.update(); // Update scenery
 
     const activeBrawlers =[blueBrawler, enemyBrawler];
     const allProjectiles =[...kiBlasts, ...homingBlasts, ...kiBalls, ...kiGrenades, ...beams];
@@ -971,6 +1051,9 @@ function updateGameLogic() {
         }
     });
 
+    // Handle Projectile logic + Environment collisions
+    checkObstacleCollisions();
+
     // Update Ki Blasts
     for (let i = kiBlasts.length - 1; i >= 0; i--) {
         let blast = kiBlasts[i];
@@ -1156,8 +1239,8 @@ function updateGameLogic() {
     }
 
     // Process movements and core combat AI
-    if (!blueBrawler.isDead) blueBrawler.applyForce(blueBrawler.getSteering(enemyBrawler, width, height, allProjectiles));
-    if (!enemyBrawler.isDead) enemyBrawler.applyForce(enemyBrawler.getSteering(blueBrawler, width, height, allProjectiles));
+    if (!blueBrawler.isDead) blueBrawler.applyForce(blueBrawler.getSteering(enemyBrawler, width, height, allProjectiles, currentArena.obstacles));
+    if (!enemyBrawler.isDead) enemyBrawler.applyForce(enemyBrawler.getSteering(blueBrawler, width, height, allProjectiles, currentArena.obstacles));
     else enemyBrawler.vel.mult(0.8);
 
     if (!blueBrawler.isDead && !enemyBrawler.isDead) {
@@ -1234,7 +1317,16 @@ function gameLoop() {
     }
 
     ctx.clearRect(0, 0, width, height);
-    drawArena();
+    
+    // Draw the new dynamic Arena!
+    currentArena.draw(ctx);
+    
+    if (blueBrawler && enemyBrawler) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.font = 'bold 80px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`SCORE: ${score}`, width / 2, height / 2 + 30);
+    }
     
     // Dead Bio-Android prey shrinks and is drawn until fully absorbed
     if (enemyBrawler && enemyBrawler.health > 0 || (enemyBrawler && enemyBrawler.isDead && blueBrawler.absorbTarget === enemyBrawler)) {
