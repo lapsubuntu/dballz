@@ -54,12 +54,59 @@ export class Brawler {
         }
 
         this.equippedSkills =[];
-        this.hasEnergyBeam = false;
         
         // Active Skills State
-        this.hasFSSJ = false;
+        this.hasEnergyBeam = false;
+        this.hasKiGrenades = false;
+        this.hasKiBall = false;
+        this.hasKiArrows = false;
+
+        this.hasChoke = false;
+        this.hasDragonThrow = false;
+        this.hasBarrage = false;
+        this.hasWolfRush = false;
+
+        this.hasBurst = false;
         this.hasKaioken = false;
         
+        this.hasPowerBoost = false;
+        this.hasFSSJ = false;
+        this.hasSSJ = false;
+        
+        this.wantsToBeam = false;
+        this.beamTimer = 0;
+
+        this.wantsToKiBall = false;
+        this.wantsToKiArrows = false;
+        this.wantsToGrenade = false;
+
+        this.chokeCd = 0;
+        this.chokeTimer = 0;
+        this.chokedTarget = null;
+
+        this.dragonThrowCd = 0;
+        this.dragonThrowTimer = 0;
+        this.dragonThrowTarget = null;
+
+        this.barrageCd = 0;
+        this.barrageTimer = 0;
+        this.barrageFists =[];
+
+        this.wolfRushCd = 0;
+        this.wolfRushTimer = 0;
+        this.wolfRushTarget = null;
+
+        this.burstCd = 0;
+        this.burstTimer = 0;
+
+        this.grenadeCd = 0;
+        this.kiBallCd = 0;
+        this.kiArrowsCd = 0;
+
+        this.powerBoostTimer = 0;
+        this.usedPowerBoost = false;
+        this.wantsToPowerBoost = false;
+
         this.fssjTimer = 0;
         this.usedFSSJ = false;
         this.wantsToFSSJ = false;
@@ -68,8 +115,14 @@ export class Brawler {
         this.usedKaioken = false;
         this.wantsToKaioken = false;
 
+        this.isTransformingSSJ = 0;
+        this.ssjTimer = 0;
+        this.usedSSJ = false;
+        this.wantsToSSJ = false;
+
         this.maxHealth = this.baseMaxHealth;
         this.health = this.maxHealth; 
+        this.isDead = false;
         
         this.maxSpeed = this.baseMaxSpeed;
         this.damage = this.baseDamage;
@@ -86,8 +139,18 @@ export class Brawler {
         this.wantsToRetreat = false;
         this.tpRequests =[]; 
 
-        this.wantsToBeam = false;
-        this.beamTimer = 0;
+        // TAIL SYSTEM
+        this.hasTail = ['Bio-Android', 'Saiyan', 'Half-Saiyan'].includes(this.raceName);
+        this.tail =[];
+        this.numTailSegments = this.raceName === 'Bio-Android' ? 10 : 7;
+        this.tailMaxDist = this.raceName === 'Bio-Android' ? 12 : 8;
+        
+        if (this.hasTail) {
+            for (let i = 0; i < this.numTailSegments; i++) this.tail.push(this.pos.copy());
+        }
+        
+        this.absorbTimer = 0;
+        this.absorbTarget = null;
 
         // Defensive & Combat states
         this.invulnTimer = 0;
@@ -128,7 +191,6 @@ export class Brawler {
         this.history =[];
         this.afterImages =[];
         
-        // Calculate initial stats via logic pipeline
         this.updateStats([]);
         this.health = this.maxHealth; 
     }
@@ -136,31 +198,41 @@ export class Brawler {
     updateStats(skillsArray) {
         this.equippedSkills = skillsArray;
 
-        // Record health percentage to prevent healing exploit on toggle
         let hpPercent = this.maxHealth > 0 ? (this.health / this.maxHealth) : 1.0;
 
-        // Reset to bases
         let currMaxHealth = this.baseMaxHealth;
         let currMaxSpeed = this.baseMaxSpeed;
         let currDamage = this.baseDamage;
         let currKnockback = this.baseKnockback;
 
-        // Apply Skill Tree Passives
+        // Passives
         if (this.equippedSkills.includes('con_1')) currMaxHealth += 20;
         if (this.equippedSkills.includes('spd_1')) currMaxSpeed += 1.5;
         if (this.equippedSkills.includes('str_1')) currDamage += 2.0;
         
+        // Actives
         this.hasEnergyBeam = this.equippedSkills.includes('ki_beam');
-        this.hasFSSJ = this.equippedSkills.includes('race_2') && this.raceName === 'Saiyan';
-        this.hasKaioken = this.equippedSkills.includes('con_2');
+        this.hasKiGrenades = this.equippedSkills.includes('ki_2');
+        this.hasKiBall = this.equippedSkills.includes('ki_3');
+        this.hasKiArrows = this.equippedSkills.includes('ki_4');
 
-        // Apply Base Racial Multipliers
+        this.hasChoke = this.equippedSkills.includes('str_2');
+        this.hasDragonThrow = this.equippedSkills.includes('str_3');
+        this.hasBarrage = this.equippedSkills.includes('spd_2');
+        this.hasWolfRush = this.equippedSkills.includes('spd_3');
+        
+        this.hasBurst = this.equippedSkills.includes('con_3');
+        this.hasKaioken = this.equippedSkills.includes('con_2');
+        
+        this.hasPowerBoost = this.equippedSkills.includes('race_all_1');
+        this.hasFSSJ = this.equippedSkills.includes('race_2') && (this.raceName === 'Saiyan' || this.raceName === 'Half-Saiyan');
+        this.hasSSJ = this.equippedSkills.includes('race_3') && (this.raceName === 'Saiyan' || this.raceName === 'Half-Saiyan');
+
         let finalHpMult = this.raceData.hpMult;
         let finalSpdMult = this.raceData.spdMult;
         let finalDmgMult = this.raceData.dmgMult;
         let finalKbMult = this.raceData.kbMult;
 
-        // Apply Racial Tree Skill (adds +0.20 to multipliers)
         if (this.equippedSkills.includes('race_1')) {
             finalHpMult += 0.20;
             finalSpdMult += 0.20;
@@ -190,7 +262,6 @@ export class Brawler {
 
     triggerBlock() {
         this.isBlocking = this.blockDuration;
-        // Increased penalty so they don't block-spam repeatedly
         this.blockCooldown = this.baseBlockCooldown + 40; 
     }
 
@@ -202,13 +273,15 @@ export class Brawler {
 
     getEffectiveDamage() {
         let dmg = this.damage;
-        // Standard Saiyan Zenkai (Overrides if FSSJ is active to prevent insane stacking)
-        if (this.raceName === 'Saiyan' && this.fssjTimer <= 0) {
+        
+        if ((this.raceName === 'Saiyan' || this.raceName === 'Half-Saiyan') && this.fssjTimer <= 0 && this.ssjTimer <= 0) {
             let missingPercent = Math.max(0, 1 - (this.health / this.maxHealth));
             dmg *= (1 + 1.0 * missingPercent); 
         }
         
+        if (this.powerBoostTimer > 0) dmg *= 1.3;
         if (this.fssjTimer > 0) dmg *= 1.5;
+        if (this.ssjTimer > 0) dmg *= 2.0; 
         if (this.kaiokenTimer > 0) dmg *= 2.5;
 
         return dmg;
@@ -221,7 +294,9 @@ export class Brawler {
             spd *= (1 + 0.8 * missingPercent); 
         }
         
+        if (this.powerBoostTimer > 0) spd *= 1.3;
         if (this.fssjTimer > 0) spd *= 1.5;
+        if (this.ssjTimer > 0) spd *= 1.8; 
 
         return spd;
     }
@@ -244,16 +319,29 @@ export class Brawler {
         return wallForce;
     }
 
-    getSteering(opponent, canvasWidth, canvasHeight) {
+    getSteering(opponent, canvasWidth, canvasHeight, projectiles) {
         if (this.stunTimer > 0) return new Vector(0, 0);
-        if (this.beamTimer > 0) return new Vector(0, 0); 
+        
+        let isLocked = this.beamTimer > 0 || this.chokeTimer > 0 || this.barrageTimer > 0 || 
+                       this.isTransformingSSJ > 0 || this.absorbTimer > 0 || 
+                       this.dragonThrowTimer > 0 || this.wolfRushTimer > 0;
+                       
+        if (isLocked) return new Vector(0, 0); 
 
-        // Active Buff Activation Logic (Once per match each)
-        if (this.hasFSSJ && !this.usedFSSJ && this.health < this.maxHealth * 0.5) {
+        // Active Transformations Logic
+        if (this.hasSSJ && !this.usedSSJ && this.health < this.maxHealth * 0.5 && this.ki >= 95) {
+            this.wantsToSSJ = true;
+            return new Vector(0,0);
+        } else if (this.hasFSSJ && !this.usedFSSJ && !this.hasSSJ && this.health < this.maxHealth * 0.5) {
             this.wantsToFSSJ = true;
         }
+
         if (this.hasKaioken && !this.usedKaioken && this.health < this.maxHealth * 0.7) {
             this.wantsToKaioken = true;
+        }
+
+        if (this.hasPowerBoost && !this.usedPowerBoost && this.health < this.maxHealth * 0.8) {
+            this.wantsToPowerBoost = true;
         }
 
         let steer = new Vector(0, 0);
@@ -268,8 +356,7 @@ export class Brawler {
         let oppApproaching = opponent.vel.mag() > 1 && opponent.vel.copy().normalize().dot(oppToMe) > 0.6;
         let isThreat = dist < this.dodgeThreshold && oppFacingMe && oppApproaching && opponent.attackLockout <= 0;
 
-        // Reduced random chance drastically so they don't retreat constantly
-        if (!isThreat && this.ki < 40 && this.stunTimer <= 0 && this.attackLockout <= 0) {
+        if (!isThreat && this.ki < 40 && this.attackLockout <= 0) {
             if (!this.wantsToRetreat && Math.random() < 0.005) { 
                 this.wantsToRetreat = true;
             }
@@ -301,7 +388,6 @@ export class Brawler {
 
         steer.add(this.avoidBorders(canvasWidth, canvasHeight, currentSpeed));
 
-        // --- INSTANT TRANSMISSION (TELEPORT) AI ---
         if (this.tpCooldown <= 0) {
             let shouldTP = false;
             if (dist > 350 && Math.random() < 0.05) shouldTP = true;
@@ -318,12 +404,10 @@ export class Brawler {
             }
         }
 
-        // --- THREAT DETECTION & DEFENSE LOGIC ---
         if (isThreat && this.isDodging <= 0 && this.isBlocking <= 0) {
             let canDodge = this.dodgeTimer <= 0;
             let canBlock = this.blockCooldown <= 0;
 
-            // FSSJ Defensive Penalty (70% chance to drop guard completely due to rage)
             if (this.fssjTimer > 0 && Math.random() < 0.70) {
                 canDodge = false;
                 canBlock = false;
@@ -339,14 +423,90 @@ export class Brawler {
             }
         }
 
-        // --- KI OFFENSE AI ---
-        if (!isThreat && this.stunTimer <= 0 && this.isDodging <= 0) {
+        // --- OFFENSIVE SKILL TRIGGERS ---
+        if (!isThreat && this.isDodging <= 0) {
             
+            // STR: Dragon Throw
+            if (this.hasDragonThrow && this.dragonThrowCd <= 0 && dist < 65 && this.attackLockout <= 0) {
+                this.dragonThrowTimer = 60;
+                this.dragonThrowCd = 500;
+                this.dragonThrowTarget = opponent;
+                this.attackLockout = 60;
+                return new Vector(0,0);
+            }
+
+            // STR: Choke
+            if (this.hasChoke && this.chokeCd <= 0 && dist < 65 && this.attackLockout <= 0) {
+                this.chokeTimer = 50;
+                this.chokeCd = 400;
+                this.chokedTarget = opponent;
+                this.attackLockout = 50;
+                return new Vector(0,0);
+            }
+
+            // SPD: Wolf Rush
+            if (this.hasWolfRush && this.wolfRushCd <= 0 && dist < 80 && this.attackLockout <= 0) {
+                this.wolfRushTimer = 80;
+                this.wolfRushCd = 500;
+                this.wolfRushTarget = opponent;
+                this.attackLockout = 80;
+                return new Vector(0,0);
+            }
+
+            // SPD: Barrage
+            if (this.hasBarrage && this.barrageCd <= 0 && dist < 80 && this.attackLockout <= 0) {
+                this.barrageTimer = 60;
+                this.barrageCd = 300;
+                this.attackLockout = 60;
+                
+                this.barrageFists =[];
+                for(let i=0; i<8; i++) {
+                    this.barrageFists.push({
+                        phase: Math.random(), 
+                        speed: 0.08 + Math.random() * 0.04,
+                        sideOffset: (Math.random() > 0.5 ? 1 : -1) * (20 + Math.random() * 40),
+                        maxExt: 50 + Math.random() * 40
+                    });
+                }
+                return new Vector(0,0);
+            }
+
+            // KI: Beam
             if (this.hasEnergyBeam && this.ki >= 50 && this.attackLockout <= 0 && dist < 600) {
                 let beamChance = dist > 250 ? 0.015 : 0.005; 
                 if (Math.random() < beamChance) {
                     this.wantsToBeam = true;
                     return new Vector(0, 0); 
+                }
+            }
+            
+            // KI: Ki Ball
+            if (this.hasKiBall && this.kiBallCd <= 0 && this.ki >= 60 && dist > 200 && this.attackLockout <= 0) {
+                if (Math.random() < 0.01) {
+                    this.kiBallCd = 360;
+                    this.ki -= 60;
+                    this.wantsToKiBall = true;
+                    return new Vector(0,0);
+                }
+            }
+
+            // KI: Grenades
+            if (this.hasKiGrenades && this.grenadeCd <= 0 && this.ki >= 40 && dist > 150 && this.attackLockout <= 0) {
+                if (Math.random() < 0.02) {
+                    this.grenadeCd = 240;
+                    this.ki -= 40;
+                    this.wantsToGrenade = true;
+                    return new Vector(0,0);
+                }
+            }
+            
+            // KI: Ki Arrows
+            if (this.hasKiArrows && this.kiArrowsCd <= 0 && this.ki >= 30 && dist > 200 && this.attackLockout <= 0) {
+                if (Math.random() < 0.03) {
+                    this.kiArrowsCd = 200;
+                    this.ki -= 30;
+                    this.wantsToKiArrows = true;
+                    return new Vector(0,0);
                 }
             }
 
@@ -364,11 +524,10 @@ export class Brawler {
             }
         }
 
-        // --- MOVEMENT EXECUTION ---
         if (this.isBlocking > 0) { 
-            currentSpeed *= 0.1; // Reduced from 0.2 to lower backward drifting
+            currentSpeed *= 0.1; 
             let holdDir = Vector.sub(this.pos, opponent.pos).normalize();
-            steer.add(holdDir.mult(currentSpeed * 0.5)); // Slower backward force
+            steer.add(holdDir.mult(currentSpeed * 0.5)); 
         } else if (this.isDodging > 0) { 
             let dodgeVector = new Vector(-opponent.vel.y * this.currentDodgeDir, opponent.vel.x * this.currentDodgeDir).normalize();
             steer.add(dodgeVector.mult(currentSpeed * 2.5));
@@ -406,6 +565,8 @@ export class Brawler {
     }
 
     update(canvasWidth, canvasHeight) {
+        if (this.absorbTimer > 0) this.absorbTimer--;
+
         if (this.invulnTimer > 0) this.invulnTimer--;
         if (this.attackLockout > 0) this.attackLockout--;
         if (this.dodgeTimer > 0) this.dodgeTimer--;
@@ -416,23 +577,95 @@ export class Brawler {
         if (this.stunTimer > 0) this.stunTimer--;
         if (this.tpCooldown > 0) this.tpCooldown--;
         
+        // Cooldowns
+        if (this.chokeCd > 0) this.chokeCd--;
+        if (this.dragonThrowCd > 0) this.dragonThrowCd--;
+        if (this.barrageCd > 0) this.barrageCd--;
+        if (this.wolfRushCd > 0) this.wolfRushCd--;
+        if (this.burstCd > 0) this.burstCd--;
+        if (this.grenadeCd > 0) this.grenadeCd--;
+        if (this.kiBallCd > 0) this.kiBallCd--;
+        if (this.kiArrowsCd > 0) this.kiArrowsCd--;
+
         if (this.comboTimer > 0) {
             this.comboTimer--;
             if (this.comboTimer <= 0) this.comboCount = 0; 
         }
 
-        if (this.beamTimer > 0) {
-            this.beamTimer--;
+        // Tail Mechanics
+        if (this.hasTail) {
+            if (this.raceName === 'Bio-Android' && this.absorbTimer > 0 && this.absorbTarget) {
+                for(let i=0; i<this.numTailSegments; i++) {
+                    let targetPoint = Vector.add(this.absorbTarget.pos, new Vector(Math.cos(i + this.absorbTimer * 0.2)*15, Math.sin(i + this.absorbTimer * 0.2)*15));
+                    this.tail[i].x += (targetPoint.x - this.tail[i].x) * 0.4;
+                    this.tail[i].y += (targetPoint.y - this.tail[i].y) * 0.4;
+                }
+                this.absorbTarget.squishX *= 0.90;
+                this.absorbTarget.squishY *= 0.90;
+                this.absorbTarget.pos.x += (this.pos.x - this.absorbTarget.pos.x) * 0.1;
+                this.absorbTarget.pos.y += (this.pos.y - this.absorbTarget.pos.y) * 0.1;
+            } else {
+                for (let i = 0; i < this.numTailSegments; i++) {
+                    let baseTarget = (i === 0) ? Vector.add(this.pos, this.lookDir.copy().mult(-this.radius)) : this.tail[i-1];
+                    let wave;
+                    
+                    if (this.raceName === 'Bio-Android') {
+                        wave = new Vector(-this.lookDir.y, this.lookDir.x).mult(Math.sin(Date.now() * 0.005 + i * 0.5) * 5);
+                    } else {
+                        // Saiyan monkey tail - curling swaying motion
+                        let sway = Math.sin(Date.now() * 0.003 - i * 0.6) * 4;
+                        wave = new Vector(-this.lookDir.y, this.lookDir.x).mult(sway);
+                    }
+
+                    let desired = Vector.add(baseTarget, wave);
+                    this.tail[i].x += (desired.x - this.tail[i].x) * 0.6;
+                    this.tail[i].y += (desired.y - this.tail[i].y) * 0.6;
+
+                    let maxSegmentDist = this.tailMaxDist;
+                    let dist = Vector.dist(this.tail[i], baseTarget);
+                    if (dist > maxSegmentDist) {
+                        let dir = Vector.sub(this.tail[i], baseTarget).normalize();
+                        this.tail[i] = Vector.add(baseTarget, dir.mult(maxSegmentDist));
+                    }
+                }
+            }
+        }
+
+        let isLocked = this.beamTimer > 0 || this.chokeTimer > 0 || this.barrageTimer > 0 || 
+                       this.isTransformingSSJ > 0 || this.absorbTimer > 0 || 
+                       this.dragonThrowTimer > 0 || this.wolfRushTimer > 0;
+
+        if (isLocked) {
             this.acc.mult(0); 
             this.vel.mult(0.8); 
         }
+        
+        if (this.beamTimer > 0) this.beamTimer--;
+        if (this.chokeTimer > 0) this.chokeTimer--;
+        if (this.dragonThrowTimer > 0) this.dragonThrowTimer--;
+        if (this.wolfRushTimer > 0) this.wolfRushTimer--;
+        if (this.burstTimer > 0) this.burstTimer--;
 
-        // Active Buffs Countdown
+        if (this.barrageTimer > 0) {
+            this.barrageTimer--;
+            this.barrageFists.forEach(f => {
+                f.phase += f.speed;
+                if (f.phase >= 1) {
+                    f.phase -= 1;
+                    f.sideOffset = (Math.random() > 0.5 ? 1 : -1) * (20 + Math.random() * 40);
+                    f.maxExt = 50 + Math.random() * 40;
+                }
+            });
+        }
+
+        // Transformation Timers
+        if (this.isTransformingSSJ > 0) this.isTransformingSSJ--;
         if (this.fssjTimer > 0) this.fssjTimer--;
+        if (this.ssjTimer > 0) this.ssjTimer--;
+        if (this.powerBoostTimer > 0) this.powerBoostTimer--;
         
         if (this.kaiokenTimer > 0) {
             this.kaiokenTimer--;
-            // Drain 1 HP per 60 frames (1 sec)
             if (this.kaiokenTimer % 60 === 0) {
                 this.health -= 1;
             }
@@ -475,7 +708,9 @@ export class Brawler {
         this.pos.add(this.vel);
         this.acc.mult(0); 
 
-        if (this.lookTarget && this.stunTimer <= 0 && this.beamTimer <= 0) {
+        let disableLook = this.stunTimer > 0 || isLocked;
+        
+        if (this.lookTarget && !disableLook) {
             let desiredLook = Vector.sub(this.lookTarget, this.pos);
             if (desiredLook.mag() > 0.1) {
                 desiredLook.normalize();
@@ -486,7 +721,7 @@ export class Brawler {
         }
 
         // --- IK HANDS CALCULATION ---
-        if (this.beamTimer <= 0) {
+        if (!disableLook) {
             this.walkCycle += this.vel.mag() * 0.15;
         }
 
@@ -501,16 +736,18 @@ export class Brawler {
         
         let leftTarget, rightTarget;
 
-        if (this.beamTimer > 0) {
-            leftTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 1.5))
-                               .add(right.copy().mult(-6));
-            rightTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 1.5))
-                                .add(right.copy().mult(6));
+        if (this.beamTimer > 0 || this.burstTimer > 0 || this.wantsToKiBall) {
+            leftTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 1.5)).add(right.copy().mult(-6));
+            rightTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 1.5)).add(right.copy().mult(6));
+        } else if (this.chokeTimer > 0 || this.dragonThrowTimer > 0) {
+            leftTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 2.0)); 
+            rightTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 0.5)).add(right.copy().mult(this.radius * 1.2)); 
+        } else if (this.wolfRushTimer > 0) {
+            leftTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 1.2)).add(right.copy().mult(-10));
+            rightTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 1.2)).add(right.copy().mult(10));
         } else if (this.isBlocking > 0) {
-            leftTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 0.9))
-                               .add(right.copy().mult(this.radius * 0.4));
-            rightTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 0.9))
-                                .add(right.copy().mult(-this.radius * 0.4)); 
+            leftTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 0.9)).add(right.copy().mult(this.radius * 0.4));
+            rightTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 0.9)).add(right.copy().mult(-this.radius * 0.4)); 
         } else {
             let bobLeft = Math.sin(this.walkCycle) * 4;
             let bobRight = Math.sin(this.walkCycle + Math.PI) * 4;
@@ -525,20 +762,12 @@ export class Brawler {
 
             if (this.punchTimer > 0) {
                 let t = 1 - (this.punchTimer / this.punchDuration); 
-                let extension = 0;
-                
-                if (t < 0.3) {
-                    extension = (t / 0.3) * 35; 
-                } else {
-                    extension = (1 - ((t - 0.3) / 0.7)) * 35; 
-                }
+                let extension = (t < 0.3) ? (t / 0.3) * 35 : (1 - ((t - 0.3) / 0.7)) * 35; 
 
                 if (this.punchHand === 1) {
-                    leftTarget = Vector.add(this.pos, forward.copy().mult(this.radius + extension))
-                                       .add(right.copy().mult(-this.radius * 0.2));
+                    leftTarget = Vector.add(this.pos, forward.copy().mult(this.radius + extension)).add(right.copy().mult(-this.radius * 0.2));
                 } else if (this.punchHand === 2) {
-                    rightTarget = Vector.add(this.pos, forward.copy().mult(this.radius + extension))
-                                        .add(right.copy().mult(this.radius * 0.2));
+                    rightTarget = Vector.add(this.pos, forward.copy().mult(this.radius + extension)).add(right.copy().mult(this.radius * 0.2));
                 }
             }
         }
@@ -561,10 +790,38 @@ export class Brawler {
     }
 
     draw(ctx) {
+        if (this.hasTail) {
+            ctx.beginPath();
+            ctx.moveTo(this.pos.x, this.pos.y);
+            for (let i = 0; i < this.numTailSegments; i++) ctx.lineTo(this.tail[i].x, this.tail[i].y);
+            
+            if (this.raceName === 'Bio-Android') {
+                ctx.strokeStyle = this.color; 
+                ctx.lineWidth = 6;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(this.tail[this.numTailSegments - 1].x, this.tail[this.numTailSegments - 1].y, 6, 0, Math.PI * 2);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fill();
+            } else {
+                let tailColor = '#5C4033'; // Monkey Brown
+                if (this.ssjTimer > 0 || this.isTransformingSSJ > 0) {
+                    tailColor = '#FFDC00'; // Super Saiyan Golden
+                }
+                ctx.strokeStyle = tailColor;
+                ctx.lineWidth = 5; 
+                ctx.lineCap = 'round';
+                ctx.stroke();
+            }
+        }
+
         this.afterImages.forEach(ai => ai.draw(ctx));
 
-        // Specialized Aura System
-        let hasAura = this.isCharging || this.kiDashTimer > 0 || this.beamTimer > 0 || this.fssjTimer > 0 || this.kaiokenTimer > 0;
+        let hasAura = this.isCharging || this.kiDashTimer > 0 || this.beamTimer > 0 || 
+                      this.fssjTimer > 0 || this.kaiokenTimer > 0 || this.isTransformingSSJ > 0 || 
+                      this.ssjTimer > 0 || this.powerBoostTimer > 0;
         
         if (hasAura) {
             ctx.save();
@@ -574,11 +831,18 @@ export class Brawler {
             let aColor = this.color;
             let aWidth = 3;
             
-            if (this.fssjTimer > 0) {
-                aColor = '#FF8C00'; // Dark Orange
+            if (this.ssjTimer > 0 || this.isTransformingSSJ > 0) {
+                aColor = '#FFDC00'; 
+                aWidth = 6;
+                auraSize += 5; 
+            } else if (this.fssjTimer > 0) {
+                aColor = '#FF8C00'; 
                 aWidth = 5;
             } else if (this.kaiokenTimer > 0) {
-                aColor = 'rgba(255, 50, 50, 0.8)'; // Faint red
+                aColor = 'rgba(255, 50, 50, 0.8)'; 
+                aWidth = 4;
+            } else if (this.powerBoostTimer > 0) {
+                aColor = '#FFFFFF';
                 aWidth = 4;
             } else if (this.kiDashTimer > 0) {
                 aWidth = 5;
@@ -595,6 +859,51 @@ export class Brawler {
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
             ctx.lineWidth = 1;
             ctx.stroke();
+            ctx.restore();
+        }
+
+        if (this.burstTimer > 0) {
+            ctx.beginPath();
+            ctx.arc(this.pos.x, this.pos.y, this.radius + 40 + (15 - this.burstTimer)*5, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(0, 255, 255, ${this.burstTimer / 15})`;
+            ctx.lineWidth = 10;
+            ctx.stroke();
+        }
+
+        if (this.barrageTimer > 0) {
+            ctx.save();
+            let forward = this.lookDir.copy();
+            let right = new Vector(-forward.y, forward.x);
+            
+            this.barrageFists.forEach(f => {
+                let p0 = Vector.add(this.pos, forward.copy().mult(this.radius)).add(right.copy().mult(f.sideOffset * 0.5));
+                let p2 = Vector.add(this.pos, forward.copy().mult(this.radius + f.maxExt)); 
+                let p1 = Vector.add(this.pos, forward.copy().mult(this.radius + f.maxExt * 0.5)).add(right.copy().mult(f.sideOffset * 1.5)); 
+
+                let t = f.phase;
+                let invT = 1 - t;
+                let handPos = new Vector(
+                    invT*invT*p0.x + 2*invT*t*p1.x + t*t*p2.x,
+                    invT*invT*p0.y + 2*invT*t*p1.y + t*t*p2.y
+                );
+
+                let alpha = Math.sin(t * Math.PI); 
+
+                ctx.beginPath();
+                ctx.moveTo(p0.x, p0.y);
+                ctx.quadraticCurveTo(p1.x, p1.y, handPos.x, handPos.y);
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 12 * alpha; 
+                ctx.globalAlpha = 0.6 * alpha;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.arc(handPos.x, handPos.y, 8, 0, Math.PI * 2);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.globalAlpha = alpha;
+                ctx.fill();
+            });
             ctx.restore();
         }
 
@@ -623,7 +932,9 @@ export class Brawler {
         
         ctx.beginPath();
         ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = isFlashing ? '#FFFFFF' : this.color;
+        
+        if (this.ssjTimer > 0) ctx.fillStyle = '#FFDC00'; 
+        else ctx.fillStyle = isFlashing ? '#FFFFFF' : this.color;
         
         if (this.stunTimer > 0 && !isFlashing) {
             ctx.fillStyle = '#666666'; 
@@ -636,18 +947,20 @@ export class Brawler {
         ctx.closePath();
         ctx.restore();
         
-        const drawHand = (pos) => {
-            ctx.beginPath();
-            ctx.arc(pos.x, pos.y, 7, 0, Math.PI * 2);
-            ctx.fillStyle = isFlashing ? '#FFFFFF' : this.color;
-            ctx.fill();
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            ctx.closePath();
-        };
-        drawHand(this.leftHand);
-        drawHand(this.rightHand);
+        if (this.barrageTimer <= 0) {
+            const drawHand = (pos) => {
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, 7, 0, Math.PI * 2);
+                ctx.fillStyle = isFlashing ? '#FFFFFF' : this.color;
+                ctx.fill();
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.closePath();
+            };
+            drawHand(this.leftHand);
+            drawHand(this.rightHand);
+        }
 
         if (this.isBlocking > 0) {
             ctx.beginPath();

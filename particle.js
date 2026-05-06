@@ -114,16 +114,128 @@ export class KiBlast {
     }
 }
 
-// NEW: Traveling Energy Beam & Clash Support
+export class HomingKiBlast {
+    constructor(x, y, dirVec, color, isPlayer, target) {
+        this.pos = new Vector(x, y);
+        this.vel = dirVec.copy().normalize().mult(12); // Slightly slower for homing
+        this.color = color;
+        this.isPlayer = isPlayer;
+        this.target = target;
+        this.radius = 6;
+        this.life = 120; 
+    }
+    update() {
+        if (this.target && !this.target.isDead) {
+            let toTarget = Vector.sub(this.target.pos, this.pos).normalize();
+            this.vel.add(toTarget.mult(0.8)); // Steer towards target
+            this.vel.limit(14); // Max speed cap
+        }
+        this.pos.add(this.vel);
+        this.life--;
+    }
+    draw(ctx) {
+        ctx.beginPath();
+        ctx.moveTo(this.pos.x, this.pos.y);
+        let tail = Vector.sub(this.pos, this.vel.copy().mult(1.5));
+        ctx.lineTo(tail.x, tail.y);
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = this.radius * 2;
+        ctx.lineCap = 'round';
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = this.color;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+    }
+}
+
+export class KiBall {
+    constructor(x, y, dirVec, color, isPlayer) {
+        this.pos = new Vector(x, y);
+        this.vel = dirVec.copy().normalize().mult(6); // Slow moving
+        this.color = color;
+        this.isPlayer = isPlayer;
+        this.radius = 25;
+        this.life = 200; 
+    }
+    update() {
+        this.pos.add(this.vel);
+        this.life--;
+    }
+    draw(ctx) {
+        let pulse = Math.sin(Date.now() / 80) * 4;
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, this.radius + pulse, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.globalAlpha = 0.8;
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+        
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, this.radius * 0.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fill();
+        
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = this.color;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+    }
+}
+
+export class KiGrenade {
+    constructor(x, y, dirVec, color, isPlayer) {
+        this.pos = new Vector(x, y);
+        
+        // Tighter forward cone so they surround the enemy better
+        let spreadAngle = (Math.random() - 0.5) * Math.PI * 0.6; 
+        let baseDir = dirVec.copy().rotate(spreadAngle);
+        
+        // Faster initial burst to travel further
+        let speed = Math.random() * 15 + 12;
+        
+        this.vel = baseDir.mult(speed); 
+        this.color = color;
+        this.isPlayer = isPlayer;
+        this.radius = 6;
+        this.life = 300; 
+        this.active = true;
+    }
+    update() {
+        this.pos.add(this.vel);
+        // Slightly lower friction so they scatter deeper into the arena
+        this.vel.mult(0.92); 
+        this.life--;
+        if (this.life <= 0) this.active = false;
+    }
+    draw(ctx) {
+        if (!this.active) return;
+        let pulse = Math.sin(Date.now() / 100) * 2;
+        ctx.beginPath();
+        ctx.arc(this.pos.x, this.pos.y, this.radius + pulse, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.stroke();
+        
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = this.color;
+        ctx.closePath();
+        ctx.shadowBlur = 0;
+    }
+}
+
 export class EnergyBeam {
     constructor(brawler) {
         this.brawler = brawler;
-        this.life = 60; // How many frames it lasts
-        this.width = 40; // Total width
+        this.life = 60; 
+        this.width = 40; 
         
         this.maxLength = 1500; 
-        this.currentLength = 0; // Starts at 0
-        this.travelSpeed = 45; // Travels quickly
+        this.currentLength = 0; 
+        this.travelSpeed = 45; 
         
         this.color = brawler.color;
         this.active = true;
@@ -147,7 +259,6 @@ export class EnergyBeam {
         this.life--;
         if (this.life <= 0) this.active = false;
         
-        // Extend the beam length each frame
         this.currentLength = Math.min(this.maxLength, this.currentLength + this.travelSpeed);
     }
     
@@ -159,7 +270,6 @@ export class EnergyBeam {
 
         ctx.save();
         
-        // Outer aura
         ctx.beginPath();
         ctx.moveTo(startPos.x, startPos.y);
         ctx.lineTo(endPos.x, endPos.y);
@@ -170,7 +280,6 @@ export class EnergyBeam {
         ctx.lineCap = 'round';
         ctx.stroke();
 
-        // Inner bright core
         ctx.beginPath();
         ctx.moveTo(startPos.x, startPos.y);
         ctx.lineTo(endPos.x, endPos.y);
@@ -193,7 +302,6 @@ export class EnergyBeam {
         let projection = toTarget.dot(lineDir);
         let actualVisualLength = this.clashPoint ? Vector.dist(start, this.clashPoint) : this.currentLength;
 
-        // Check if the target is within the CURRENT visible segment of the line
         if (projection > 0 && projection < actualVisualLength) {
             let closestPoint = Vector.add(start, lineDir.mult(projection));
             let dist = Vector.dist(target.pos, closestPoint);
