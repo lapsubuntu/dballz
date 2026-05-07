@@ -349,6 +349,39 @@ canvas {
     color: #fff;
 }
 
+/* HUB UI Specifics */
+#hub-ui {
+    position: absolute;
+    bottom: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 20px;
+    z-index: 5;
+}
+
+.hub-btn {
+    background: rgba(10, 10, 10, 0.9);
+    border: 2px solid #FF851B;
+    color: #FF851B;
+    padding: 15px 40px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 24px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    transition: all 0.2s ease;
+    box-shadow: 0 0 15px rgba(255, 133, 27, 0.4);
+}
+
+.hub-btn:hover {
+    background: #FF851B;
+    color: #111;
+    transform: scale(1.05);
+    box-shadow: 0 0 25px rgba(255, 133, 27, 0.8);
+}
+
 .hidden {
     display: none !important;
 }

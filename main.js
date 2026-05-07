@@ -15,18 +15,18 @@ let score = 0;
 let senzuBeans = 3; // Senzu System
 
 let isPlaying = false;
+let currentMode = 'MENU'; // Modes: MENU, HUB, ZENKAI
 let hitStopFrames = 0;
 let screenShake = 0;
 
-let particles = [];
-let kiBlasts =[];
+let particles =[];
+let kiBlasts = [];
 let homingBlasts = [];
-let kiBalls = [];
+let kiBalls =[];
 let kiGrenades = [];
 let beams =[];
 
-let currentArena = new Arena('Desert', width, height);
-
+let currentArena = new Arena('Space', width, height);
 let playerSelectedRace = null;
 
 const ENEMY_COLORS =['#FF4136', '#2ECC40', '#FF851B', '#B10DC9', '#FFDC00', '#F012BE'];
@@ -212,6 +212,9 @@ viewport.addEventListener('mousemove', (e) => {
 viewport.addEventListener('mouseup', () => isDraggingTree = false);
 viewport.addEventListener('mouseleave', () => isDraggingTree = false);
 
+// Event Listener for Hub Buttons
+document.getElementById('btn-zenkai-battle').addEventListener('click', startZenkaiBattle);
+
 // BALANCED UPGRADES
 const UPGRADES =[
     { name: "Sharpened Strikes", desc: "Increase base damage by 1.0.", apply: (p) => { p.baseDamage += 1.0; p.updateStats(getEquippedSkillIDs()); } },
@@ -254,7 +257,10 @@ function updateProfileUI() {
 
 function showRaceSelect() {
     isPlaying = false;
+    currentMode = 'MENU';
     senzuBeans = 3; // Reset Senzu beans on fresh start
+    score = 0;
+    blueBrawler = null; // Clear out previous player entirely
     
     const uiLayer = document.getElementById('ui-layer');
     const raceModal = document.getElementById('race-selection');
@@ -263,6 +269,7 @@ function showRaceSelect() {
     uiLayer.classList.remove('hidden');
     raceModal.classList.remove('hidden');
     document.getElementById('upgrade-selection').classList.add('hidden');
+    document.getElementById('hub-ui').classList.add('hidden');
     
     raceOptions.innerHTML = '';
     logCombat('Select your fighter.');
@@ -277,10 +284,69 @@ function showRaceSelect() {
             playerSelectedRace = race.name;
             uiLayer.classList.add('hidden');
             raceModal.classList.add('hidden');
-            startGame();
+            enterHub(); // Go to Hub instead of straight to battle
         };
         raceOptions.appendChild(btn);
     });
+}
+
+function enterHub() {
+    currentMode = 'HUB';
+    document.getElementById('hub-ui').classList.remove('hidden');
+    
+    // Create new Space arena
+    currentArena = new Arena('Space', width, height);
+    
+    // Clean up projectiles from previous battles
+    particles = [];
+    kiBlasts = [];
+    homingBlasts =[];
+    kiBalls = [];
+    kiGrenades = [];
+    beams =[];
+
+    if (!blueBrawler) {
+        let style = STYLES[Math.floor(Math.random() * STYLES.length)];
+        blueBrawler = new Brawler(width / 2, height / 2, '#0074D9', true, style, playerSelectedRace);
+        blueBrawler.updateStats(getEquippedSkillIDs());
+    } else {
+        blueBrawler.fullRestore();
+        blueBrawler.pos = new Vector(width / 2, height / 2);
+        blueBrawler.vel.mult(0);
+        blueBrawler.updateStats(getEquippedSkillIDs()); // Ensure active skills apply
+    }
+    
+    enemyBrawler = null; // Remove the enemy from the hub
+    
+    updateProfileUI();
+    isPlaying = true;
+    logCombat('Idling in the void. Manage skills or seek a battle.');
+}
+
+function startZenkaiBattle() {
+    currentMode = 'ZENKAI';
+    document.getElementById('hub-ui').classList.add('hidden');
+    
+    // Create Battle Arena
+    currentArena = new Arena('Desert', width, height);
+    
+    // Clear out projectiles just in case
+    particles = [];
+    kiBlasts =[];
+    homingBlasts = [];
+    kiBalls = [];
+    kiGrenades = [];
+    beams =[];
+
+    // Reset Player for Battle
+    blueBrawler.pos = new Vector(width / 4, height / 2);
+    blueBrawler.vel.mult(0);
+    blueBrawler.fullRestore();
+
+    spawnEnemy();
+    updateProfileUI();
+    isPlaying = true;
+    logCombat('Zenkai Battle: Fight!');
 }
 
 function showUpgradeSelect(isSenzuRevive = false) {
@@ -311,19 +377,20 @@ function showUpgradeSelect(isSenzuRevive = false) {
         btn.onclick = () => {
             upgrade.apply(blueBrawler);
             
-            if (isSenzuRevive) {
-                blueBrawler.fullRestore(); 
-                logCombat('Revived and ready to fight!');
-            } else {
-                logCombat('A new challenger approaches!');
-            }
-
-            updateProfileUI();
             uiLayer.classList.add('hidden');
             upgradeModal.classList.add('hidden');
             
-            spawnEnemy();
-            isPlaying = true;
+            if (isSenzuRevive) {
+                blueBrawler.fullRestore(); 
+                logCombat('Revived and ready to fight!');
+                // Automatically resume Zenkai battle if revived
+                spawnEnemy();
+                isPlaying = true;
+            } else {
+                logCombat('Returning to Hub...');
+                enterHub(); // Return to Hub after a regular victory
+            }
+            updateProfileUI();
         };
         upgradeOptions.appendChild(btn);
     });
@@ -357,12 +424,12 @@ function showAbsorbSelect() {
         btn.onclick = () => {
             trait.apply(blueBrawler);
             updateProfileUI();
+            
             uiLayer.classList.add('hidden');
             upgradeModal.classList.add('hidden');
             
-            spawnEnemy();
-            isPlaying = true;
-            logCombat('A new challenger approaches!');
+            logCombat('Returning to Hub...');
+            enterHub(); // Return to Hub after absorbing
         };
         upgradeOptions.appendChild(btn);
     });
@@ -386,31 +453,7 @@ function triggerWin(isAbsorb = false) {
     }, 1500);
 }
 
-function startGame() {
-    score = 0;
-    particles = [];
-    kiBlasts =[];
-    homingBlasts = [];
-    kiBalls = [];
-    kiGrenades = [];
-    beams =[];
-    currentArena.generate();
-    spawnPlayer();
-    spawnEnemy();
-    updateProfileUI();
-    isPlaying = true;
-    logCombat('Fight!');
-}
-
-function spawnPlayer() {
-    let style = STYLES[Math.floor(Math.random() * STYLES.length)];
-    blueBrawler = new Brawler(width / 4, height / 2, '#0074D9', true, style, playerSelectedRace);
-    blueBrawler.updateStats(getEquippedSkillIDs());
-}
-
 function spawnEnemy() {
-    currentArena.generate(); 
-    
     let color = ENEMY_COLORS[Math.floor(Math.random() * ENEMY_COLORS.length)];
     let style = STYLES[Math.floor(Math.random() * STYLES.length)];
     let allRaces = Object.keys(RACES);
@@ -722,7 +765,7 @@ function getSegmentIntersection(p0, p1, p2, p3) {
 }
 
 function checkObstacleCollisions() {
-    let activeBrawlers =[blueBrawler, enemyBrawler].filter(b => !b.isDead);
+    let activeBrawlers = [blueBrawler, enemyBrawler].filter(b => b && !b.isDead);
     
     // Brawler against Obstacles
     activeBrawlers.forEach(b => {
@@ -816,7 +859,7 @@ function updateGameLogic() {
 
     currentArena.update(); // Update scenery
 
-    const activeBrawlers =[blueBrawler, enemyBrawler];
+    const activeBrawlers = [blueBrawler, enemyBrawler].filter(b => b);
     const allProjectiles =[...kiBlasts, ...homingBlasts, ...kiBalls, ...kiGrenades, ...beams];
 
     activeBrawlers.forEach(b => {
@@ -872,7 +915,8 @@ function updateGameLogic() {
                     }
                 }
             });
-            if (Vector.dist(b.pos, opponent.pos) < 150) {
+            
+            if (opponent && Vector.dist(b.pos, opponent.pos) < 150) {
                 let push = Vector.sub(opponent.pos, b.pos).normalize().mult(b.burstTimer === 15 ? 20 : 2);
                 opponent.vel.add(push);
                 opponent.stunTimer = Math.max(opponent.stunTimer, 20);
@@ -938,8 +982,6 @@ function updateGameLogic() {
                 spawnExplosion(target.pos.x, target.pos.y, b.color, 8, 2);
                 screenShake = Math.max(screenShake, 6);
                 b.lookDir = Vector.sub(target.pos, b.pos).normalize();
-                
-                // Trigger a punch animation dynamically during the rush
                 b.triggerPunch();
             }
             
@@ -959,8 +1001,6 @@ function updateGameLogic() {
                 spawnExplosion(target.pos.x, target.pos.y, '#FFFFFF', 30, 4);
                 screenShake = Math.max(screenShake, 25);
                 hitStopFrames = 10;
-                
-                // Finisher punch extension
                 b.triggerPunch();
                 b.wolfRushTarget = null;
             }
@@ -977,9 +1017,11 @@ function updateGameLogic() {
 
         if (b.isTransformingSSJ > 0) {
             spawnExplosion(b.pos.x, b.pos.y, '#FFFFFF', 1, 3); 
-            let toOpp = Vector.sub(opponent.pos, b.pos);
-            if (toOpp.mag() < 300) {
-                opponent.vel.add(toOpp.normalize().mult(1.5)); 
+            if (opponent) {
+                let toOpp = Vector.sub(opponent.pos, b.pos);
+                if (toOpp.mag() < 300) {
+                    opponent.vel.add(toOpp.normalize().mult(1.5)); 
+                }
             }
             if (b.isTransformingSSJ === 1) {
                 b.ssjTimer = 1800; // 30 seconds
@@ -1031,7 +1073,7 @@ function updateGameLogic() {
             kiBlasts.push(new KiBlast(spawnPos.x, spawnPos.y, b.lookDir, b.color, b.isPlayer));
         }
 
-        if (b.wantsToGrenade) {
+        if (b.wantsToGrenade && opponent) {
             b.wantsToGrenade = false;
             let toOpp = Vector.sub(opponent.pos, b.pos).normalize();
             for(let i=0; i<12; i++) { 
@@ -1041,7 +1083,7 @@ function updateGameLogic() {
             logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} scattered a Grenade Barrage!`);
         }
 
-        if (b.wantsToKiArrows) {
+        if (b.wantsToKiArrows && opponent) {
             b.wantsToKiArrows = false;
             let toOpp = Vector.sub(opponent.pos, b.pos).normalize();
             for(let i=-1; i<=1; i++) { 
@@ -1085,6 +1127,8 @@ function updateGameLogic() {
         }
 
         let target = blast.isPlayer ? enemyBrawler : blueBrawler;
+        if (!target) continue;
+        
         if (Vector.dist(blast.pos, target.pos) < target.radius + blast.radius) {
             if (target.burstTimer > 0 || target.isDead) continue; 
 
@@ -1115,6 +1159,8 @@ function updateGameLogic() {
         }
 
         let target = blast.isPlayer ? enemyBrawler : blueBrawler;
+        if (!target) continue;
+        
         if (Vector.dist(blast.pos, target.pos) < target.radius + blast.radius) {
             if (target.burstTimer > 0 || target.isDead) continue; 
             if (target.isBlocking > 0) {
@@ -1141,6 +1187,8 @@ function updateGameLogic() {
         }
 
         let target = ball.isPlayer ? enemyBrawler : blueBrawler;
+        if (!target) continue;
+
         if (Vector.dist(ball.pos, target.pos) < target.radius + ball.radius) {
             if (target.burstTimer > 0 || target.isDead) continue; 
             if (target.isBlocking > 0) {
@@ -1162,9 +1210,10 @@ function updateGameLogic() {
         let g = kiGrenades[i];
         g.update();
 
+        let target = g.isPlayer ? enemyBrawler : blueBrawler;
+
         if (g.detonating) {
-            let target = g.isPlayer ? enemyBrawler : blueBrawler;
-            if (g.detonateTimer === 1 && !target.isDead) { 
+            if (target && g.detonateTimer === 1 && !target.isDead) { 
                 if (Vector.dist(g.pos, target.pos) < g.radius + target.radius + 20) {
                     if (target.burstTimer <= 0) {
                         if (target.isBlocking > 0) {
@@ -1187,8 +1236,7 @@ function updateGameLogic() {
             continue;
         }
 
-        let target = g.isPlayer ? enemyBrawler : blueBrawler;
-        if (!target.isDead && Vector.dist(g.pos, target.pos) < target.radius + 60) {
+        if (target && !target.isDead && Vector.dist(g.pos, target.pos) < target.radius + 60) {
             g.detonating = true;
             g.vel.mult(0); 
         }
@@ -1240,7 +1288,7 @@ function updateGameLogic() {
         let beam = beams[i];
         let target = beam.brawler.isPlayer ? enemyBrawler : blueBrawler;
         
-        if (!target.isDead && target.burstTimer <= 0 && beam.checkCollision(target)) {
+        if (target && !target.isDead && target.burstTimer <= 0 && beam.checkCollision(target)) {
             if (target.isBlocking > 0) {
                 target.health -= 0.5; 
                 target.vel.add(beam.brawler.lookDir.copy().mult(1));
@@ -1258,21 +1306,28 @@ function updateGameLogic() {
     }
 
     // Process movements and core combat AI
-    if (!blueBrawler.isDead) blueBrawler.applyForce(blueBrawler.getSteering(enemyBrawler, width, height, allProjectiles, currentArena.obstacles));
-    if (!enemyBrawler.isDead) enemyBrawler.applyForce(enemyBrawler.getSteering(blueBrawler, width, height, allProjectiles, currentArena.obstacles));
-    else enemyBrawler.vel.mult(0.8);
+    if (blueBrawler && !blueBrawler.isDead) {
+        blueBrawler.applyForce(blueBrawler.getSteering(enemyBrawler, width, height, allProjectiles, currentArena.obstacles));
+    }
+    
+    if (enemyBrawler && !enemyBrawler.isDead) {
+        enemyBrawler.applyForce(enemyBrawler.getSteering(blueBrawler, width, height, allProjectiles, currentArena.obstacles));
+    } else if (enemyBrawler) {
+        enemyBrawler.vel.mult(0.8);
+    }
 
-    if (!blueBrawler.isDead && !enemyBrawler.isDead) {
+    // Only process melee clash logic if both exist
+    if (blueBrawler && !blueBrawler.isDead && enemyBrawler && !enemyBrawler.isDead) {
         handleCombat();
     }
 
-    blueBrawler.update(width, height);
-    enemyBrawler.update(width, height);
+    if (blueBrawler) blueBrawler.update(width, height);
+    if (enemyBrawler) enemyBrawler.update(width, height);
     
     updateProfileUI();
 
     // Kill Death Logic & Bio-Android Absorb State Transition
-    if (enemyBrawler.health <= 0 && !enemyBrawler.isDead) {
+    if (enemyBrawler && enemyBrawler.health <= 0 && !enemyBrawler.isDead) {
         enemyBrawler.isDead = true; 
         enemyBrawler.stunTimer = 9999;
         enemyBrawler.attackLockout = 9999;
@@ -1293,7 +1348,7 @@ function updateGameLogic() {
         }
     }
 
-    if (enemyBrawler.isDead) {
+    if (enemyBrawler && enemyBrawler.isDead) {
         enemyBrawler.vel.mult(0.5); 
         if (blueBrawler.absorbTimer > 0) {
             // Wait for animation
@@ -1305,7 +1360,7 @@ function updateGameLogic() {
     }
 
     // PLAYER DEATH & SENZU SYSTEM
-    if (blueBrawler.health <= 0 && !blueBrawler.isDead) {
+    if (blueBrawler && blueBrawler.health <= 0 && !blueBrawler.isDead) {
         blueBrawler.isDead = true;
         
         if (senzuBeans > 0) {
@@ -1357,7 +1412,7 @@ function gameLoop() {
     // Draw the Arena
     currentArena.draw(ctx);
     
-    if (blueBrawler && enemyBrawler) {
+    if (currentMode === 'ZENKAI' && blueBrawler && enemyBrawler) {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
         ctx.font = 'bold 80px Arial';
         ctx.textAlign = 'center';
@@ -1365,7 +1420,7 @@ function gameLoop() {
     }
     
     // Dead Bio-Android prey shrinks and is drawn until fully absorbed
-    if (enemyBrawler && enemyBrawler.health > 0 || (enemyBrawler && enemyBrawler.isDead && blueBrawler.absorbTarget === enemyBrawler)) {
+    if (enemyBrawler && enemyBrawler.health > 0 || (enemyBrawler && enemyBrawler.isDead && blueBrawler && blueBrawler.absorbTarget === enemyBrawler)) {
         enemyBrawler.draw(ctx);
     }
 

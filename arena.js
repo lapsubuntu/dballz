@@ -114,12 +114,17 @@ export class Arena {
         this.width = width;
         this.height = height;
         this.obstacles =[];
+        this.stars = [];
+        this.planets =[];
         this.bgCanvas = null; 
         this.generate();
     }
 
     generate() {
-        this.obstacles =[];
+        this.obstacles = [];
+        this.stars =[];
+        this.planets =[];
+        
         if (this.theme === 'Desert') {
             this.generateSandBackground();
 
@@ -135,6 +140,27 @@ export class Arena {
                 let rx = 150 + Math.random() * (this.width - 300);
                 let ry = 150 + Math.random() * (this.height - 300);
                 this.obstacles.push(new Obstacle(rx, ry, 'pillar'));
+            }
+        } else if (this.theme === 'Space') {
+            let numStars = 150 + Math.floor(Math.random() * 100);
+            for(let i = 0; i < numStars; i++) {
+                this.stars.push({
+                    x: Math.random() * this.width,
+                    y: Math.random() * this.height,
+                    size: Math.random() * 2 + 0.5,
+                    seed: Math.random() * Math.PI * 2,
+                    speed: Math.random() * 0.003 + 0.001
+                });
+            }
+
+            let numPlanets = 2 + Math.floor(Math.random() * 3);
+            for(let i = 0; i < numPlanets; i++) {
+                this.planets.push({
+                    x: Math.random() * this.width,
+                    y: Math.random() * this.height,
+                    radius: 40 + Math.random() * 80,
+                    hue: Math.floor(Math.random() * 360)
+                });
             }
         }
     }
@@ -230,12 +256,39 @@ export class Arena {
         if (this.theme === 'Desert' && this.bgCanvas) {
             // Draw the pre-calculated noise background
             ctx.drawImage(this.bgCanvas, 0, 0);
+        } else if (this.theme === 'Space') {
+            ctx.fillStyle = '#050510';
+            ctx.fillRect(0, 0, this.width, this.height);
+            
+            let time = Date.now();
+            // Draw Stars
+            this.stars.forEach(s => {
+                let alpha = 0.4 + Math.sin(time * s.speed + s.seed) * 0.6;
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // Draw distant planets
+            this.planets.forEach(p => {
+                let grad = ctx.createRadialGradient(
+                    p.x - p.radius * 0.3, p.y - p.radius * 0.3, p.radius * 0.1, 
+                    p.x, p.y, p.radius
+                );
+                grad.addColorStop(0, `hsl(${p.hue}, 50%, 40%)`);
+                grad.addColorStop(1, '#000000');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
         } else {
             ctx.fillStyle = '#222';
             ctx.fillRect(0, 0, this.width, this.height);
         }
 
-        let sortedObstacles =[...this.obstacles].sort((a, b) => a.pos.y - b.pos.y);
+        let sortedObstacles = [...this.obstacles].sort((a, b) => a.pos.y - b.pos.y);
         sortedObstacles.forEach(obs => obs.draw(ctx));
     }
 }

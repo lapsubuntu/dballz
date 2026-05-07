@@ -10,6 +10,7 @@ export class Brawler {
         
         this.lookDir = new Vector(1, 0); 
         this.lookTarget = null;
+        this.wanderAngle = Math.random() * Math.PI * 2; // Used for idle drifting
         
         this.radius = 20;
         this.color = color;
@@ -140,7 +141,7 @@ export class Brawler {
         this.tpRequests =[]; 
 
         // TAIL SYSTEM - Half-Saiyans do NOT have tails!
-        this.hasTail = ['Bio-Android', 'Saiyan'].includes(this.raceName);
+        this.hasTail =['Bio-Android', 'Saiyan'].includes(this.raceName);
         this.tail =[];
         this.numTailSegments = this.raceName === 'Bio-Android' ? 10 : 7;
         this.tailMaxDist = this.raceName === 'Bio-Android' ? 12 : 8;
@@ -189,7 +190,7 @@ export class Brawler {
         this.punchDuration = Math.max(4, this.attackCooldown - 2); 
 
         this.history = [];
-        this.afterImages =[];
+        this.afterImages = [];
         
         this.updateStats([]);
         this.health = this.maxHealth; 
@@ -370,6 +371,43 @@ export class Brawler {
                        
         if (isLocked) return new Vector(0, 0); 
 
+        let steer = new Vector(0, 0);
+
+        // --- HUB IDLE BEHAVIOR ---
+        if (!opponent) {
+            this.wanderAngle += (Math.random() * 0.1 - 0.05);
+            let currentSpeed = this.maxSpeed * 0.25; // Float slowly
+            
+            // Generate gentle wandering force
+            let circleCenter = this.vel.copy().normalize().mult(40);
+            if (this.vel.mag() === 0) circleCenter = new Vector(1, 0).mult(40);
+            
+            let displacement = new Vector(Math.cos(this.wanderAngle), Math.sin(this.wanderAngle)).mult(15);
+            let wanderForce = Vector.add(circleCenter, displacement);
+            wanderForce.normalize().mult(currentSpeed);
+            
+            // Soft pull to center if drifting too far off
+            let center = new Vector(canvasWidth / 2, canvasHeight / 2);
+            let toCenter = Vector.sub(center, this.pos);
+            if (toCenter.mag() > canvasHeight * 0.3) {
+                wanderForce.add(toCenter.normalize().mult(currentSpeed * 0.4));
+            }
+
+            steer.add(Vector.sub(wanderForce, this.vel));
+            steer.add(this.avoidBorders(canvasWidth, canvasHeight, currentSpeed));
+            
+            // Look where we are drifting
+            let futurePos = Vector.add(this.pos, this.vel.copy().normalize().mult(100));
+            this.lookTarget = futurePos;
+            
+            // Passive healing and Ki regen in the hub
+            this.ki = Math.min(this.maxKi, this.ki + 0.2);
+            this.health = Math.min(this.maxHealth, this.health + 0.1);
+            
+            return steer.limit(this.maxForce * 0.3);
+        }
+        // --- END HUB BEHAVIOR ---
+
         // Active Transformations Logic
         if (this.hasSSJ && !this.usedSSJ && this.health < this.maxHealth * 0.5 && this.ki >= 95) {
             this.wantsToSSJ = true;
@@ -386,7 +424,6 @@ export class Brawler {
             this.wantsToPowerBoost = true;
         }
 
-        let steer = new Vector(0, 0);
         let toOpp = Vector.sub(opponent.pos, this.pos);
         let dist = toOpp.mag();
         let currentSpeed = this.getEffectiveSpeed();
