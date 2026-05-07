@@ -1,5 +1,3 @@
-
-
 import { Vector } from './vector.js';
 import { Brawler } from './brawler.js';
 import { RACES, getRandomRaces } from './races.js';
@@ -14,16 +12,17 @@ const height = canvas.height;
 let blueBrawler;
 let enemyBrawler;
 let score = 0;
+let senzuBeans = 3; // Senzu System
 
 let isPlaying = false;
 let hitStopFrames = 0;
 let screenShake = 0;
 
-let particles =[];
+let particles = [];
 let kiBlasts =[];
-let homingBlasts =[];
-let kiBalls =[];
-let kiGrenades =[];
+let homingBlasts = [];
+let kiBalls = [];
+let kiGrenades = [];
 let beams =[];
 
 let currentArena = new Arena('Desert', width, height);
@@ -213,12 +212,12 @@ viewport.addEventListener('mousemove', (e) => {
 viewport.addEventListener('mouseup', () => isDraggingTree = false);
 viewport.addEventListener('mouseleave', () => isDraggingTree = false);
 
-
+// BALANCED UPGRADES
 const UPGRADES =[
-    { name: "Sharpened Strikes", desc: "Increase base damage by 2.", apply: (p) => { p.baseDamage += 2; p.updateStats(getEquippedSkillIDs()); } },
-    { name: "Iron Will", desc: "Increase base Max HP by 20 and heal.", apply: (p) => { p.baseMaxHealth += 20; p.updateStats(getEquippedSkillIDs()); p.health += 20; } },
-    { name: "Agility Training", desc: "Increase base Speed by 1.5.", apply: (p) => { p.baseMaxSpeed += 1.5; p.updateStats(getEquippedSkillIDs()); } },
-    { name: "Heavy Weight", desc: "Increase base Knockback by 10.", apply: (p) => { p.baseKnockback += 10; p.updateStats(getEquippedSkillIDs()); } },
+    { name: "Sharpened Strikes", desc: "Increase base damage by 1.0.", apply: (p) => { p.baseDamage += 1.0; p.updateStats(getEquippedSkillIDs()); } },
+    { name: "Iron Will", desc: "Increase base Max HP by 10 and heal.", apply: (p) => { p.baseMaxHealth += 10; p.updateStats(getEquippedSkillIDs()); p.health += 10; } },
+    { name: "Agility Training", desc: "Increase base Speed by 0.5.", apply: (p) => { p.baseMaxSpeed += 0.5; p.updateStats(getEquippedSkillIDs()); } },
+    { name: "Heavy Weight", desc: "Increase base Knockback by 5.", apply: (p) => { p.baseKnockback += 5; p.updateStats(getEquippedSkillIDs()); } },
     { name: "Full Restore", desc: "Heal back to 100% HP.", apply: (p) => p.health = p.maxHealth },
     { name: "Vampirism", desc: "Heal 5 HP instantly.", apply: (p) => p.health = Math.min(p.maxHealth, p.health + 5) }
 ];
@@ -248,10 +247,15 @@ function updateProfileUI() {
 
     let blockSecs = Math.max(0, (blueBrawler.blockCooldown / 60)).toFixed(1);
     document.getElementById('ui-block').innerText = blockSecs > 0 ? `${blockSecs}s` : "READY";
+
+    // Senzu Beans Update
+    document.getElementById('ui-senzu-count').innerText = senzuBeans;
 }
 
 function showRaceSelect() {
     isPlaying = false;
+    senzuBeans = 3; // Reset Senzu beans on fresh start
+    
     const uiLayer = document.getElementById('ui-layer');
     const raceModal = document.getElementById('race-selection');
     const raceOptions = document.getElementById('race-options');
@@ -279,7 +283,7 @@ function showRaceSelect() {
     });
 }
 
-function showUpgradeSelect() {
+function showUpgradeSelect(isSenzuRevive = false) {
     isPlaying = false;
     const uiLayer = document.getElementById('ui-layer');
     const upgradeModal = document.getElementById('upgrade-selection');
@@ -289,10 +293,14 @@ function showUpgradeSelect() {
     upgradeModal.classList.remove('hidden');
     document.getElementById('race-selection').classList.add('hidden');
     
-    upgradeModal.querySelector('h2').innerText = "Victory! Choose an Upgrade";
+    upgradeModal.querySelector('h2').innerText = isSenzuRevive ? "Senzu Bean! Pick an Upgrade" : "Victory! Choose an Upgrade";
     upgradeOptions.innerHTML = '';
     
-    let shuffled = [...UPGRADES].sort(() => 0.5 - Math.random());
+    let availableUpgrades = isSenzuRevive 
+        ? UPGRADES.filter(u => u.name !== 'Full Restore' && u.name !== 'Vampirism') // Don't give heals if they just ate a senzu
+        : [...UPGRADES];
+
+    let shuffled = availableUpgrades.sort(() => 0.5 - Math.random());
     let choices = shuffled.slice(0, 3);
     
     choices.forEach(upgrade => {
@@ -302,13 +310,20 @@ function showUpgradeSelect() {
         
         btn.onclick = () => {
             upgrade.apply(blueBrawler);
+            
+            if (isSenzuRevive) {
+                blueBrawler.fullRestore(); 
+                logCombat('Revived and ready to fight!');
+            } else {
+                logCombat('A new challenger approaches!');
+            }
+
             updateProfileUI();
             uiLayer.classList.add('hidden');
             upgradeModal.classList.add('hidden');
             
             spawnEnemy();
             isPlaying = true;
-            logCombat('A new challenger approaches!');
         };
         upgradeOptions.appendChild(btn);
     });
@@ -327,10 +342,11 @@ function showAbsorbSelect() {
     upgradeModal.querySelector('h2').innerText = "Absorb Enemy Trait!";
     upgradeOptions.innerHTML = '';
     
+    // BALANCED BIO-ANDROID ABSORBS
     let traits =[
-        { name: "Absorb Power", desc: `Gain +${(enemyBrawler.damage * 0.1).toFixed(1)} Base Damage.`, apply: (p) => { p.baseDamage += enemyBrawler.damage * 0.1; p.updateStats(getEquippedSkillIDs()); } },
-        { name: "Absorb Agility", desc: `Gain +${(enemyBrawler.maxSpeed * 0.05).toFixed(1)} Base Speed.`, apply: (p) => { p.baseMaxSpeed += enemyBrawler.maxSpeed * 0.05; p.updateStats(getEquippedSkillIDs()); } },
-        { name: "Absorb Vitality", desc: `Gain +${(enemyBrawler.maxHealth * 0.15).toFixed(0)} Max HP & Heal.`, apply: (p) => { let inc = enemyBrawler.maxHealth * 0.15; p.baseMaxHealth += inc; p.updateStats(getEquippedSkillIDs()); p.health += inc; } }
+        { name: "Absorb Power", desc: `Gain +${(enemyBrawler.damage * 0.05).toFixed(1)} Base Damage.`, apply: (p) => { p.baseDamage += enemyBrawler.damage * 0.05; p.updateStats(getEquippedSkillIDs()); } },
+        { name: "Absorb Agility", desc: `Gain +${(enemyBrawler.maxSpeed * 0.02).toFixed(1)} Base Speed.`, apply: (p) => { p.baseMaxSpeed += enemyBrawler.maxSpeed * 0.02; p.updateStats(getEquippedSkillIDs()); } },
+        { name: "Absorb Vitality", desc: `Gain +${(enemyBrawler.maxHealth * 0.08).toFixed(0)} Max HP & Heal.`, apply: (p) => { let inc = enemyBrawler.maxHealth * 0.08; p.baseMaxHealth += inc; p.updateStats(getEquippedSkillIDs()); p.health += inc; } }
     ];
     
     traits.forEach(trait => {
@@ -366,17 +382,17 @@ function triggerWin(isAbsorb = false) {
     
     setTimeout(() => {
         if (isAbsorb) showAbsorbSelect();
-        else showUpgradeSelect();
+        else showUpgradeSelect(false);
     }, 1500);
 }
 
 function startGame() {
     score = 0;
-    particles =[];
+    particles = [];
     kiBlasts =[];
-    homingBlasts =[];
-    kiBalls =[];
-    kiGrenades =[];
+    homingBlasts = [];
+    kiBalls = [];
+    kiGrenades = [];
     beams =[];
     currentArena.generate();
     spawnPlayer();
@@ -706,7 +722,7 @@ function getSegmentIntersection(p0, p1, p2, p3) {
 }
 
 function checkObstacleCollisions() {
-    let activeBrawlers = [blueBrawler, enemyBrawler].filter(b => !b.isDead);
+    let activeBrawlers =[blueBrawler, enemyBrawler].filter(b => !b.isDead);
     
     // Brawler against Obstacles
     activeBrawlers.forEach(b => {
@@ -724,11 +740,8 @@ function checkObstacleCollisions() {
                 if (b.vel.mag() > 8) {
                     obs.takeDamage(b.vel.mag() * 1.5, b.vel);
                     
-                    // Fixed: Only apply collision damage to brawler if they were stunned/thrown
-                    // This guarantees they can't kill themselves by simply dashing into rocks!
                     if (b.stunTimer > 0) {
                         let envDamage = b.vel.mag() * 0.2;
-                        // Cap health drop so the environment cannot deal the lethal blow directly
                         b.health = Math.max(1, b.health - envDamage);
                         logCombat(`${b.isPlayer ? 'Player' : 'Enemy'} crashed into a ${obs.type}!`);
                     }
@@ -925,6 +938,9 @@ function updateGameLogic() {
                 spawnExplosion(target.pos.x, target.pos.y, b.color, 8, 2);
                 screenShake = Math.max(screenShake, 6);
                 b.lookDir = Vector.sub(target.pos, b.pos).normalize();
+                
+                // Trigger a punch animation dynamically during the rush
+                b.triggerPunch();
             }
             
             if (b.wolfRushTimer === 30) {
@@ -943,6 +959,9 @@ function updateGameLogic() {
                 spawnExplosion(target.pos.x, target.pos.y, '#FFFFFF', 30, 4);
                 screenShake = Math.max(screenShake, 25);
                 hitStopFrames = 10;
+                
+                // Finisher punch extension
+                b.triggerPunch();
                 b.wolfRushTarget = null;
             }
         }
@@ -1285,17 +1304,34 @@ function updateGameLogic() {
         }
     }
 
+    // PLAYER DEATH & SENZU SYSTEM
     if (blueBrawler.health <= 0 && !blueBrawler.isDead) {
         blueBrawler.isDead = true;
-        spawnExplosion(blueBrawler.pos.x, blueBrawler.pos.y, blueBrawler.color, 80, 4.0);
-        screenShake = 35;
-        hitStopFrames = 15;
-        isPlaying = false;
-        updateProfileUI();
-        logCombat('You were defeated! Skill tree reset.');
         
-        resetSkillTree(); 
-        setTimeout(showRaceSelect, 2000);
+        if (senzuBeans > 0) {
+            senzuBeans--;
+            logCombat(`Defeated! Ate a Senzu Bean! (${senzuBeans} left)`);
+            spawnExplosion(blueBrawler.pos.x, blueBrawler.pos.y, '#2ECC40', 40, 3.0); 
+            screenShake = 35;
+            hitStopFrames = 15;
+            isPlaying = false;
+            updateProfileUI();
+            
+            setTimeout(() => {
+                showUpgradeSelect(true); // Flag to say this is a Senzu Revive!
+            }, 1500);
+            
+        } else {
+            spawnExplosion(blueBrawler.pos.x, blueBrawler.pos.y, blueBrawler.color, 80, 4.0);
+            screenShake = 35;
+            hitStopFrames = 15;
+            isPlaying = false;
+            updateProfileUI();
+            logCombat('You were defeated! Skill tree reset.');
+            
+            resetSkillTree(); 
+            setTimeout(showRaceSelect, 2000);
+        }
     }
 }
 
@@ -1318,7 +1354,7 @@ function gameLoop() {
 
     ctx.clearRect(0, 0, width, height);
     
-    // Draw the new dynamic Arena!
+    // Draw the Arena
     currentArena.draw(ctx);
     
     if (blueBrawler && enemyBrawler) {

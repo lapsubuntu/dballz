@@ -1,5 +1,3 @@
-
-
 import { Vector } from './vector.js';
 import { RACES } from './races.js';
 import { AfterImage } from './particle.js';
@@ -141,8 +139,8 @@ export class Brawler {
         this.wantsToRetreat = false;
         this.tpRequests =[]; 
 
-        // TAIL SYSTEM
-        this.hasTail =['Bio-Android', 'Saiyan', 'Half-Saiyan'].includes(this.raceName);
+        // TAIL SYSTEM - Half-Saiyans do NOT have tails!
+        this.hasTail = ['Bio-Android', 'Saiyan'].includes(this.raceName);
         this.tail =[];
         this.numTailSegments = this.raceName === 'Bio-Android' ? 10 : 7;
         this.tailMaxDist = this.raceName === 'Bio-Android' ? 12 : 8;
@@ -190,11 +188,53 @@ export class Brawler {
         this.punchTimer = 0;
         this.punchDuration = Math.max(4, this.attackCooldown - 2); 
 
-        this.history =[];
+        this.history = [];
         this.afterImages =[];
         
         this.updateStats([]);
         this.health = this.maxHealth; 
+    }
+
+    fullRestore() {
+        this.health = this.maxHealth;
+        this.ki = this.maxKi;
+        this.isDead = false;
+        this.vel.mult(0);
+        this.acc.mult(0);
+
+        // Clear all negative states
+        this.stunTimer = 0;
+        this.attackLockout = 0;
+        this.isDodging = 0;
+        this.isBlocking = 0;
+        this.blockCooldown = 0;
+        this.tpCooldown = 0;
+        this.comboCount = 0;
+        this.comboTimer = 0;
+
+        // Clear locks and actions
+        this.chokeTimer = 0;
+        this.chokedTarget = null;
+        this.dragonThrowTimer = 0;
+        this.dragonThrowTarget = null;
+        this.barrageTimer = 0;
+        this.wolfRushTimer = 0;
+        this.wolfRushTarget = null;
+        this.beamTimer = 0;
+        this.absorbTimer = 0;
+        this.absorbTarget = null;
+        this.kiDashTimer = 0;
+        
+        // Clear all transformation timers (so Senzu resets states cleanly)
+        this.isTransformingSSJ = 0;
+        this.ssjTimer = 0;
+        this.usedSSJ = false; // They can transform again after Senzu
+        this.fssjTimer = 0;
+        this.usedFSSJ = false;
+        this.kaiokenTimer = 0;
+        this.usedKaioken = false;
+        this.powerBoostTimer = 0;
+        this.usedPowerBoost = false;
     }
 
     updateStats(skillsArray) {
@@ -321,7 +361,6 @@ export class Brawler {
         return wallForce;
     }
 
-    // UPDATE: Passed obstacles array for pathing logic
     getSteering(opponent, canvasWidth, canvasHeight, projectiles, obstacles) {
         if (this.stunTimer > 0) return new Vector(0, 0);
         
@@ -368,7 +407,7 @@ export class Brawler {
             this.wantsToRetreat = false; 
         }
 
-        // --- NEW: Obstacle Avoidance AI ---
+        // Obstacle Avoidance AI
         if (obstacles) {
             obstacles.forEach(obs => {
                 if (obs.falling || obs.isDead) return;
@@ -415,7 +454,7 @@ export class Brawler {
                 
                 this.triggerTeleport(tpTarget);
                 this.lookTarget = opponent.pos.copy();
-                return steer; // Return current small steer to avoid skipping frame forces
+                return steer; 
             }
         }
 
@@ -438,7 +477,7 @@ export class Brawler {
             }
         }
 
-        // --- OFFENSIVE SKILL TRIGGERS ---
+        // OFFENSIVE SKILL TRIGGERS
         if (!isThreat && this.isDodging <= 0) {
             
             // STR: Dragon Throw
@@ -733,7 +772,7 @@ export class Brawler {
             }
         }
 
-        // --- IK HANDS CALCULATION ---
+        // IK HANDS CALCULATION
         if (!disableLook) {
             this.walkCycle += this.vel.mag() * 0.15;
         }
@@ -756,8 +795,16 @@ export class Brawler {
             leftTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 2.0)); 
             rightTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 0.5)).add(right.copy().mult(this.radius * 1.2)); 
         } else if (this.wolfRushTimer > 0) {
+            // Apply a base offset for the rush, but allow punch extensions!
             leftTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 1.2)).add(right.copy().mult(-10));
             rightTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 1.2)).add(right.copy().mult(10));
+            
+            if (this.punchTimer > 0) {
+                let t = 1 - (this.punchTimer / this.punchDuration); 
+                let extension = (t < 0.3) ? (t / 0.3) * 35 : (1 - ((t - 0.3) / 0.7)) * 35; 
+                if (this.punchHand === 1) leftTarget.add(forward.copy().mult(extension));
+                else if (this.punchHand === 2) rightTarget.add(forward.copy().mult(extension));
+            }
         } else if (this.isBlocking > 0) {
             leftTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 0.9)).add(right.copy().mult(this.radius * 0.4));
             rightTarget = Vector.add(this.pos, forward.copy().mult(this.radius * 0.9)).add(right.copy().mult(-this.radius * 0.4)); 

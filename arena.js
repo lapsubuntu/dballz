@@ -16,36 +16,26 @@ export class Obstacle {
             this.isStatic = false;
             this.color = '#c2b280'; 
             this.height = 0;
+            this.health = this.maxHealth;
         } else if (type === 'pillar') {
-            // Increased variance in pillar size
             this.radius = 20 + Math.random() * 25;
             this.mass = 999; 
-            this.maxHealth = 120 + Math.random() * 80;
+            this.maxHealth = 9999; // Practically infinite, but we bypass damage anyway
             this.isStatic = true;
             this.color = '#a08a58';
             this.height = 40 + Math.random() * 50;
-            
-            this.falling = false;
-            this.fallTimer = 0;
-            this.fallDir = new Vector(0, 1);
+            this.health = this.maxHealth;
         }
-        
-        this.health = this.maxHealth;
     }
 
     takeDamage(amt, knockbackVec) {
+        // Pillars are completely indestructible
+        if (this.type === 'pillar') return; 
+
         this.health -= amt;
         
         if (this.health <= 0 && !this.isDead) {
-            if (this.type === 'pillar' && !this.falling) {
-                this.falling = true;
-                this.fallTimer = 30; 
-                if (knockbackVec && knockbackVec.mag() > 0.1) {
-                    this.fallDir = knockbackVec.copy().normalize();
-                } else {
-                    this.fallDir = new Vector((Math.random() - 0.5), (Math.random() - 0.5)).normalize();
-                }
-            } else if (this.type === 'rock') {
+            if (this.type === 'rock') {
                 this.isDead = true;
             }
         } else if (this.type === 'rock' && knockbackVec && !this.isStatic) {
@@ -54,14 +44,6 @@ export class Obstacle {
     }
 
     update(boundsWidth, boundsHeight) {
-        if (this.falling) {
-            this.fallTimer--;
-            this.height *= 0.85; 
-            if (this.fallTimer <= 0) {
-                this.isDead = true;
-            }
-        }
-
         if (!this.isStatic) {
             this.pos.add(this.vel);
             this.vel.mult(0.85); 
@@ -100,11 +82,8 @@ export class Obstacle {
             for (let i = 1; i <= layers; i++) {
                 let hOffset = (this.height / layers) * i;
                 
-                let fallOffsetX = this.falling ? this.fallDir.x * (30 - this.fallTimer) * (i / layers) : 0;
-                let fallOffsetY = this.falling ? this.fallDir.y * (30 - this.fallTimer) * (i / layers) : 0;
-                
-                let layerY = this.pos.y - hOffset + fallOffsetY;
-                let layerX = this.pos.x + fallOffsetX;
+                let layerY = this.pos.y - hOffset;
+                let layerX = this.pos.x;
 
                 this.buildShapePath(ctx, layerX, layerY, this.radius);
                 
@@ -115,16 +94,6 @@ export class Obstacle {
                 ctx.strokeStyle = `hsl(40, 30%, ${lightness - 15}%)`;
                 ctx.lineWidth = 2;
                 ctx.stroke();
-
-                if (i === layers && this.health < this.maxHealth * 0.5) {
-                    ctx.beginPath();
-                    ctx.moveTo(layerX - this.radius * 0.5, layerY);
-                    ctx.lineTo(layerX + this.radius * 0.2, layerY + this.radius * 0.4);
-                    ctx.lineTo(layerX + this.radius * 0.6, layerY - this.radius * 0.3);
-                    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-                    ctx.lineWidth = 3;
-                    ctx.stroke();
-                }
             }
         } else if (this.type === 'rock') {
             this.buildShapePath(ctx, this.pos.x, this.pos.y, this.radius);
@@ -183,7 +152,7 @@ export class Arena {
 
         // Generate Wavy Layered Dunes
         let numDunes = 12;
-        let baseHues = [40, 42, 38, 39, 41]; // Desert sand hues
+        let baseHues =[40, 42, 38, 39, 41]; // Desert sand hues
 
         for (let i = 0; i < numDunes; i++) {
             // Distribute dunes from top to bottom
@@ -266,7 +235,7 @@ export class Arena {
             ctx.fillRect(0, 0, this.width, this.height);
         }
 
-        let sortedObstacles = [...this.obstacles].sort((a, b) => a.pos.y - b.pos.y);
+        let sortedObstacles =[...this.obstacles].sort((a, b) => a.pos.y - b.pos.y);
         sortedObstacles.forEach(obs => obs.draw(ctx));
     }
 }
