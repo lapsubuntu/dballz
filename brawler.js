@@ -1,5 +1,5 @@
 import { Vector } from './vector.js';
-import { RACES } from './races.js';
+import { RACES, generateRaceName } from './races.js'; 
 import { AfterImage } from './particle.js';
 
 export class Brawler {
@@ -17,6 +17,7 @@ export class Brawler {
         this.isPlayer = isPlayer;
         this.style = style;
         this.raceName = raceName;
+        this.name = generateRaceName(raceName); 
 
         this.raceData = RACES[raceName];
 
@@ -1112,7 +1113,7 @@ export class Brawler {
         ctx.fillStyle = this.isPlayer ? 'rgba(0, 255, 0, 0.9)' : 'rgba(255, 255, 255, 0.8)';
         ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
-        let labelText = this.isPlayer ? `P1: ${this.raceName} ${this.style}` : `${this.raceName} ${this.style}`;
+        let labelText = this.isPlayer ? `P1: ${this.name} (${this.raceName} ${this.style})` : `${this.name} (${this.raceName} ${this.style})`; 
         ctx.fillText(labelText, this.pos.x, this.pos.y - this.radius - 28);
     }
 }

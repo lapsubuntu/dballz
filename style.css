@@ -1,3 +1,4 @@
+
 * {
     box-sizing: border-box;
     margin: 0;
@@ -262,7 +263,7 @@ hr {
     border-radius: 2px;
     position: absolute;
     top: -4px;
-    left: 50%; /* Neutral starting point */
+    left: 50%;
     transform: translateX(-50%);
     transition: left 0.5s ease-in-out;
     box-shadow: 0 0 5px rgba(255,255,255,0.8);
@@ -299,6 +300,175 @@ hr {
 
 canvas {
     display: block;
+}
+
+/* --- CONTACT MODULE (PHONE) --- */
+.phone-container {
+    position: absolute;
+    bottom: -350px; 
+    left: 20px;
+    width: 300px;
+    height: 400px;
+    background: rgba(15, 15, 15, 0.98);
+    border: 4px solid #444;
+    border-bottom: none;
+    border-radius: 20px 20px 0 0;
+    z-index: 5; 
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 25px rgba(0,0,0,0.8);
+    /* Fixed the bouncy overflow so we don't clip the bottom edge */
+    transition: bottom 0.35s ease-out, border-color 0.3s;
+}
+
+.phone-container:hover {
+    bottom: 0;
+}
+
+.phone-container.has-notification {
+    border-color: #FF851B;
+    animation: phone-pulse 2s infinite;
+}
+
+@keyframes phone-pulse {
+    0% { box-shadow: 0 0 10px rgba(255, 133, 27, 0.4); }
+    50% { box-shadow: 0 0 30px rgba(255, 133, 27, 1); }
+    100% { box-shadow: 0 0 10px rgba(255, 133, 27, 0.4); }
+}
+
+.phone-header {
+    height: 50px;
+    background: #222;
+    border-radius: 15px 15px 0 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 18px;
+    font-weight: bold;
+    color: #fff;
+    border-bottom: 2px solid #333;
+    position: relative;
+    cursor: default;
+}
+
+.notification-badge {
+    position: absolute;
+    right: 15px;
+    background: #FF4136;
+    color: white;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 14px;
+    font-weight: bold;
+    box-shadow: 0 0 10px #FF4136;
+}
+
+.phone-content {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 15px;
+    background: #0f0f0f;
+}
+
+.empty-text {
+    color: #666;
+    text-align: center;
+    font-style: italic;
+    margin-top: 20px;
+}
+
+/* Contacts List */
+.contact-item {
+    display: flex;
+    align-items: center;
+    background: #1a1a1a;
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    border: 1px solid #333;
+}
+
+.contact-color {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    margin-right: 12px;
+    border: 2px solid #fff;
+}
+
+.contact-info h4 {
+    margin: 0;
+    font-size: 15px;
+    color: #fff;
+}
+
+.contact-info p {
+    margin: 3px 0 0;
+    font-size: 12px;
+    color: #aaa;
+}
+
+/* Active Chat */
+#chat-history {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.chat-bubble {
+    padding: 10px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.4;
+    max-width: 90%;
+    color: #fff;
+    animation: pop-in 0.3s ease-out;
+}
+
+@keyframes pop-in {
+    0% { opacity: 0; transform: scale(0.8); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+.chat-bubble.enemy {
+    background: #2a2a2a;
+    border-left: 4px solid #FF851B;
+    align-self: flex-start;
+}
+
+.chat-bubble.player {
+    background: #0074D9;
+    align-self: flex-end;
+    border-right: 4px solid #7FDBFF;
+}
+
+#chat-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.chat-option-btn {
+    background: #111;
+    border: 1px solid #0074D9;
+    color: #fff;
+    padding: 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    text-align: left;
+    transition: all 0.2s;
+}
+
+.chat-option-btn:hover {
+    background: #0074D9;
+    color: #fff;
+    padding-left: 15px;
 }
 
 /* UI Modal Overlay */

@@ -39,6 +39,37 @@
                 <button id="btn-zenkai-battle" class="hub-btn">Zenkai Battle</button>
             </div>
             
+            <!-- Contact Module (Phone) -->
+            <div id="contact-module" class="phone-container">
+                <div class="phone-header">
+                    <span>Contacts</span>
+                    <span id="phone-notif" class="notification-badge hidden">!</span>
+                </div>
+                <div class="phone-content" id="phone-content">
+                    
+                    <!-- Normal Contacts View -->
+                    <div id="contacts-view">
+                        <div id="contacts-list">
+                            <p class="empty-text">No contacts yet.</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Active Chat View -->
+                    <div id="chat-view" class="hidden">
+                        <div id="chat-history"></div>
+                        <div id="chat-options"></div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Dialogue Box (for cutscenes and in-game speech) -->
+            <div id="dialogue-box" class="hidden">
+                <p id="dialogue-speaker"></p>
+                <p id="dialogue-text"></p>
+                <button id="dialogue-next-btn" class="hidden">></button>
+            </div>
+
             <!-- UI Overlay for Menus -->
             <div id="ui-layer">
                 <!-- Race Selection -->
@@ -49,7 +80,7 @@
 
                 <!-- Zenkai Match Prompt -->
                 <div id="zenkai-prompt" class="modal hidden">
-                    <h2 style="color: #FF4136;">Warning: New Challenger!</h2>
+                    <h2 id="zenkai-title" style="color: #FF4136;">Warning: New Challenger!</h2>
                     <div id="zenkai-enemy-info" class="enemy-stats-box">
                         <!-- Filled dynamically by JS -->
                     </div>
@@ -75,12 +106,16 @@
                     <div id="upgrade-options" class="options-container"></div>
                 </div>
             </div>
+
+            <!-- Fullscreen Fade Overlay -->
+            <div id="fade-overlay" class="hidden"></div>
         </div>
 
         <!-- Profile Panel (Right Side) -->
         <div id="profile-panel">
             <h2>Player Profile</h2>
             <div class="stat-group">
+                <p><strong>Name:</strong> <span id="ui-name">-</span></p> <!-- ADDED: Player Name display -->
                 <p><strong>Race:</strong> <span id="ui-race">-</span></p>
                 <p><strong>Style:</strong> <span id="ui-style">-</span></p>
                 <p>
