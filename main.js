@@ -1,3 +1,5 @@
+
+
 import { Vector } from './vector.js';
 import { Brawler } from './brawler.js';
 import { RACES, getRandomRaces } from './races.js';
@@ -14,13 +16,17 @@ let enemyBrawler;
 let score = 0;
 let senzuBeans = 3; // Senzu System
 
+// Alignment System State
+let playerAlignment = 0; // -100 (Evil) to +100 (Hero)
+let sparedEnemies =[]; // Memory array for future mechanics
+
 let isPlaying = false;
 let currentMode = 'MENU'; // Modes: MENU, HUB, ZENKAI
 let hitStopFrames = 0;
 let screenShake = 0;
 
 let particles =[];
-let kiBlasts = [];
+let kiBlasts =[];
 let homingBlasts = [];
 let kiBalls =[];
 let kiGrenades = [];
@@ -212,8 +218,17 @@ viewport.addEventListener('mousemove', (e) => {
 viewport.addEventListener('mouseup', () => isDraggingTree = false);
 viewport.addEventListener('mouseleave', () => isDraggingTree = false);
 
-// Event Listener for Hub Buttons
-document.getElementById('btn-zenkai-battle').addEventListener('click', startZenkaiBattle);
+// Event Listeners for Game Flow Buttons
+document.getElementById('btn-zenkai-battle').addEventListener('click', promptZenkaiBattle);
+document.getElementById('btn-accept-zenkai').addEventListener('click', startZenkaiBattle);
+document.getElementById('btn-decline-zenkai').addEventListener('click', () => {
+    document.getElementById('ui-layer').classList.add('hidden');
+    document.getElementById('zenkai-prompt').classList.add('hidden');
+    enemyBrawler = null; // Discard the enemy
+    enterHub(); 
+});
+document.getElementById('btn-spare').addEventListener('click', () => handleFate('spare'));
+document.getElementById('btn-kill').addEventListener('click', () => handleFate('kill'));
 
 // BALANCED UPGRADES
 const UPGRADES =[
@@ -235,6 +250,18 @@ function updateProfileUI() {
     
     document.getElementById('ui-race').innerText = blueBrawler.raceName;
     document.getElementById('ui-style').innerText = blueBrawler.style;
+    
+    // Update Alignment Details
+    let alignPercent = 50 + (playerAlignment / 2); // -100 -> 0%, +100 -> 100%
+    document.getElementById('ui-alignment-marker').style.left = `${alignPercent}%`;
+    
+    let alignLabel = 'Neutral';
+    if (playerAlignment <= -80) alignLabel = 'Pure Evil';
+    else if (playerAlignment <= -30) alignLabel = 'Villain';
+    else if (playerAlignment < 30) alignLabel = 'Neutral';
+    else if (playerAlignment < 80) alignLabel = 'Hero';
+    else alignLabel = 'Savior';
+    document.getElementById('ui-alignment-label').innerText = alignLabel;
     
     let hpStr = `${Math.ceil(Math.max(0, blueBrawler.health))} / ${Math.ceil(blueBrawler.maxHealth)}`;
     document.getElementById('ui-hp').innerText = hpStr;
@@ -258,9 +285,11 @@ function updateProfileUI() {
 function showRaceSelect() {
     isPlaying = false;
     currentMode = 'MENU';
-    senzuBeans = 3; // Reset Senzu beans on fresh start
+    senzuBeans = 3; 
     score = 0;
-    blueBrawler = null; // Clear out previous player entirely
+    playerAlignment = 0; // Reset Alignment on death
+    sparedEnemies =[]; // Clear memories on death
+    blueBrawler = null; 
     
     const uiLayer = document.getElementById('ui-layer');
     const raceModal = document.getElementById('race-selection');
@@ -269,6 +298,8 @@ function showRaceSelect() {
     uiLayer.classList.remove('hidden');
     raceModal.classList.remove('hidden');
     document.getElementById('upgrade-selection').classList.add('hidden');
+    document.getElementById('zenkai-prompt').classList.add('hidden');
+    document.getElementById('fate-selection').classList.add('hidden');
     document.getElementById('hub-ui').classList.add('hidden');
     
     raceOptions.innerHTML = '';
@@ -301,7 +332,7 @@ function enterHub() {
     particles = [];
     kiBlasts = [];
     homingBlasts =[];
-    kiBalls = [];
+    kiBalls =[];
     kiGrenades = [];
     beams =[];
 
@@ -323,14 +354,65 @@ function enterHub() {
     logCombat('Idling in the void. Manage skills or seek a battle.');
 }
 
-function startZenkaiBattle() {
-    currentMode = 'ZENKAI';
+function calculateWinChance(player, enemy) {
+    let pPower = player.maxHealth * player.getEffectiveDamage() * player.getEffectiveSpeed();
+    let ePower = enemy.maxHealth * enemy.getEffectiveDamage() * enemy.getEffectiveSpeed();
+    
+    pPower *= (1 + player.equippedSkills.length * 0.15);
+    pPower *= (1 + (senzuBeans * 0.2)); 
+    
+    ePower *= (1 + enemy.equippedSkills.length * 0.15);
+
+    let ratio = pPower / (pPower + ePower);
+    let percent = Math.floor(ratio * 100);
+    
+    let variance = Math.floor(Math.random() * 7) - 3; 
+    return Math.max(1, Math.min(99, percent + variance)); 
+}
+
+function promptZenkaiBattle() {
+    spawnEnemy(); // Generates the enemy data in the background
+
+    isPlaying = false;
+    currentMode = 'MENU';
+    
+    const uiLayer = document.getElementById('ui-layer');
+    const promptModal = document.getElementById('zenkai-prompt');
+    const infoBox = document.getElementById('zenkai-enemy-info');
+    
+    uiLayer.classList.remove('hidden');
+    promptModal.classList.remove('hidden');
     document.getElementById('hub-ui').classList.add('hidden');
     
-    // Create Battle Arena
-    currentArena = new Arena('Desert', width, height);
+    let winChance = calculateWinChance(blueBrawler, enemyBrawler);
     
-    // Clear out projectiles just in case
+    // Mystery Stats logic
+    let hideHP = score >= 2 && Math.random() > 0.5;
+    let hideDmg = score >= 4 && Math.random() > 0.4;
+    
+    infoBox.innerHTML = `
+        <p>Race: <span>${enemyBrawler.raceName}</span></p>
+        <p>Style: <span>${enemyBrawler.style}</span></p>
+        <p>Est. HP: <span>${hideHP ? '???' : Math.floor(enemyBrawler.maxHealth)}</span></p>
+        <p>Est. Dmg: <span>${hideDmg ? '???' : enemyBrawler.baseDamage.toFixed(1)}</span></p>
+        <div class="win-chance" style="color: ${winChance >= 50 ? '#2ECC40' : '#FF4136'}">
+            Win Probability: ${winChance}%
+        </div>
+    `;
+    
+    logCombat('A challenger approaches...');
+}
+
+function startZenkaiBattle() {
+    document.getElementById('ui-layer').classList.add('hidden');
+    document.getElementById('zenkai-prompt').classList.add('hidden');
+
+    currentMode = 'ZENKAI';
+    
+    // Create Battle Arena (Randomly select between Space and Desert)
+    let selectedTheme = Math.random() > 0.5 ? 'Desert' : 'Space';
+    currentArena = new Arena(selectedTheme, width, height);
+    
     particles = [];
     kiBlasts =[];
     homingBlasts = [];
@@ -338,15 +420,84 @@ function startZenkaiBattle() {
     kiGrenades = [];
     beams =[];
 
-    // Reset Player for Battle
     blueBrawler.pos = new Vector(width / 4, height / 2);
     blueBrawler.vel.mult(0);
     blueBrawler.fullRestore();
 
-    spawnEnemy();
+    let spawnX = (width / 4) * 3;
+    let spawnY = height / 4 + Math.random() * (height / 2);
+    enemyBrawler.pos = new Vector(spawnX, spawnY);
+    enemyBrawler.vel.mult(0);
+
     updateProfileUI();
     isPlaying = true;
     logCombat('Zenkai Battle: Fight!');
+}
+
+function showFateSelection() {
+    isPlaying = false; // Freeze the game world
+    const uiLayer = document.getElementById('ui-layer');
+    const fateModal = document.getElementById('fate-selection');
+    
+    uiLayer.classList.remove('hidden');
+    fateModal.classList.remove('hidden');
+    
+    // Ensure others are hidden
+    document.getElementById('race-selection').classList.add('hidden');
+    document.getElementById('zenkai-prompt').classList.add('hidden');
+    document.getElementById('upgrade-selection').classList.add('hidden');
+    
+    let color = enemyBrawler.moralAlignment === 'Hero' ? '#01FF70' : '#FF4136';
+    document.getElementById('fate-enemy-info').innerHTML = `This combatant is a <span style="color: ${color}; font-weight: bold;">${enemyBrawler.moralAlignment}</span>.`;
+    logCombat('Choose their fate...');
+}
+
+function handleFate(decision) {
+    document.getElementById('fate-selection').classList.add('hidden');
+    
+    if (decision === 'spare') {
+        logCombat(`You spared the ${enemyBrawler.moralAlignment}.`);
+        
+        // Save to memory
+        sparedEnemies.push({
+            race: enemyBrawler.raceName,
+            style: enemyBrawler.style,
+            alignment: enemyBrawler.moralAlignment,
+            color: enemyBrawler.color
+        });
+        
+        playerAlignment += 5; // Slight hero boost for showing mercy
+
+        // Vanish enemy peacefully
+        spawnExplosion(enemyBrawler.pos.x, enemyBrawler.pos.y, '#FFFFFF', 20, 1.0);
+        triggerWin(false); 
+        
+    } else if (decision === 'kill') {
+        logCombat(`You executed the ${enemyBrawler.moralAlignment}.`);
+        
+        // Major Alignment shifts for killing
+        if (enemyBrawler.moralAlignment === 'Hero') {
+            playerAlignment -= 20; // Killing good makes you evil
+        } else {
+            playerAlignment += 20; // Killing evil makes you a hero
+        }
+        
+        if (blueBrawler.raceName === 'Bio-Android') {
+            // Bio-Android specific flow (resume game to play absorb animation)
+            blueBrawler.absorbTarget = enemyBrawler;
+            blueBrawler.absorbTimer = 60;
+            logCombat(`Absorbing ${enemyBrawler.raceName}...`);
+            document.getElementById('ui-layer').classList.add('hidden'); // Drop overlay
+            isPlaying = true; // Resume Loop
+        } else {
+            spawnExplosion(enemyBrawler.pos.x, enemyBrawler.pos.y, enemyBrawler.color, 80, 4.0);
+            triggerWin(false);
+        }
+    }
+    
+    // Cap alignment
+    playerAlignment = Math.max(-100, Math.min(100, playerAlignment));
+    updateProfileUI();
 }
 
 function showUpgradeSelect(isSenzuRevive = false) {
@@ -358,6 +509,8 @@ function showUpgradeSelect(isSenzuRevive = false) {
     uiLayer.classList.remove('hidden');
     upgradeModal.classList.remove('hidden');
     document.getElementById('race-selection').classList.add('hidden');
+    document.getElementById('zenkai-prompt').classList.add('hidden');
+    document.getElementById('fate-selection').classList.add('hidden');
     
     upgradeModal.querySelector('h2').innerText = isSenzuRevive ? "Senzu Bean! Pick an Upgrade" : "Victory! Choose an Upgrade";
     upgradeOptions.innerHTML = '';
@@ -383,9 +536,8 @@ function showUpgradeSelect(isSenzuRevive = false) {
             if (isSenzuRevive) {
                 blueBrawler.fullRestore(); 
                 logCombat('Revived and ready to fight!');
-                // Automatically resume Zenkai battle if revived
                 spawnEnemy();
-                isPlaying = true;
+                startZenkaiBattle(); 
             } else {
                 logCombat('Returning to Hub...');
                 enterHub(); // Return to Hub after a regular victory
@@ -404,12 +556,10 @@ function showAbsorbSelect() {
     
     uiLayer.classList.remove('hidden');
     upgradeModal.classList.remove('hidden');
-    document.getElementById('race-selection').classList.add('hidden');
     
     upgradeModal.querySelector('h2').innerText = "Absorb Enemy Trait!";
     upgradeOptions.innerHTML = '';
     
-    // BALANCED BIO-ANDROID ABSORBS
     let traits =[
         { name: "Absorb Power", desc: `Gain +${(enemyBrawler.damage * 0.05).toFixed(1)} Base Damage.`, apply: (p) => { p.baseDamage += enemyBrawler.damage * 0.05; p.updateStats(getEquippedSkillIDs()); } },
         { name: "Absorb Agility", desc: `Gain +${(enemyBrawler.maxSpeed * 0.02).toFixed(1)} Base Speed.`, apply: (p) => { p.baseMaxSpeed += enemyBrawler.maxSpeed * 0.02; p.updateStats(getEquippedSkillIDs()); } },
@@ -463,6 +613,9 @@ function spawnEnemy() {
     let spawnY = height / 4 + Math.random() * (height / 2);
     
     enemyBrawler = new Brawler(spawnX, spawnY, color, false, style, randomRace);
+    
+    // Assign Alignment
+    enemyBrawler.moralAlignment = Math.random() > 0.5 ? 'Hero' : 'Villain';
     
     let enemySkills =[];
     if (score >= 1 && Math.random() < 0.3) enemySkills.push('race_all_1'); // Power Boost
@@ -765,7 +918,7 @@ function getSegmentIntersection(p0, p1, p2, p3) {
 }
 
 function checkObstacleCollisions() {
-    let activeBrawlers = [blueBrawler, enemyBrawler].filter(b => b && !b.isDead);
+    let activeBrawlers =[blueBrawler, enemyBrawler].filter(b => b && !b.isDead);
     
     // Brawler against Obstacles
     activeBrawlers.forEach(b => {
@@ -1326,7 +1479,7 @@ function updateGameLogic() {
     
     updateProfileUI();
 
-    // Kill Death Logic & Bio-Android Absorb State Transition
+    // Kill Death Logic & Fate Selection Overlay Trigger
     if (enemyBrawler && enemyBrawler.health <= 0 && !enemyBrawler.isDead) {
         enemyBrawler.isDead = true; 
         enemyBrawler.stunTimer = 9999;
@@ -1338,20 +1491,15 @@ function updateGameLogic() {
         enemyBrawler.wantsToKaioken = false;
         enemyBrawler.wantsToGrenade = false;
 
-        if (blueBrawler.raceName === 'Bio-Android') {
-            blueBrawler.absorbTarget = enemyBrawler;
-            blueBrawler.absorbTimer = 60;
-            logCombat(`Absorbing ${enemyBrawler.raceName}...`);
-        } else {
-            spawnExplosion(enemyBrawler.pos.x, enemyBrawler.pos.y, enemyBrawler.color, 80, 4.0);
-            triggerWin(false);
-        }
+        // Trigger Fate Selection rather than immediate auto-kill
+        showFateSelection();
     }
 
+    // Handle Bio-Android Post-Fate Animation
     if (enemyBrawler && enemyBrawler.isDead) {
         enemyBrawler.vel.mult(0.5); 
         if (blueBrawler.absorbTimer > 0) {
-            // Wait for animation
+            // Wait for tail animation
         } else if (blueBrawler.absorbTarget) {
             blueBrawler.absorbTarget = null;
             spawnExplosion(enemyBrawler.pos.x, enemyBrawler.pos.y, blueBrawler.color, 50, 3);

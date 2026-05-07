@@ -243,6 +243,31 @@ hr {
     transition: width 0.1s ease;
 }
 
+/* Alignment Bar */
+.alignment-bar-bg {
+    width: 100%;
+    height: 12px;
+    background: linear-gradient(to right, #FF4136 0%, #777 50%, #01FF70 100%);
+    border-radius: 6px;
+    position: relative;
+    margin-top: 5px;
+    border: 1px solid #222;
+}
+
+.alignment-marker {
+    width: 4px;
+    height: 18px;
+    background: #ffffff;
+    border: 1px solid #000;
+    border-radius: 2px;
+    position: absolute;
+    top: -4px;
+    left: 50%; /* Neutral starting point */
+    transform: translateX(-50%);
+    transition: left 0.5s ease-in-out;
+    box-shadow: 0 0 5px rgba(255,255,255,0.8);
+}
+
 #combat-log {
     margin-top: auto;
     background: #0f0f0f;
@@ -347,6 +372,41 @@ canvas {
 
 .choice-btn:hover p {
     color: #fff;
+}
+
+/* Zenkai Enemy Stats Box */
+.enemy-stats-box {
+    background: #111;
+    border: 2px solid #FF851B;
+    padding: 15px 25px;
+    border-radius: 8px;
+    text-align: left;
+    margin: 0 auto;
+    max-width: 400px;
+    font-size: 16px;
+    line-height: 1.6;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+}
+
+.enemy-stats-box p {
+    display: flex;
+    justify-content: space-between;
+    margin: 8px 0;
+    border-bottom: 1px solid #333;
+    padding-bottom: 4px;
+}
+
+.enemy-stats-box span {
+    color: #FFDC00;
+    font-weight: bold;
+}
+
+.win-chance {
+    text-align: center;
+    font-size: 22px;
+    margin-top: 15px;
+    font-weight: bold;
+    text-shadow: 0 0 8px rgba(0,0,0,0.8);
 }
 
 /* HUB UI Specifics */

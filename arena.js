@@ -149,7 +149,8 @@ export class Arena {
                     y: Math.random() * this.height,
                     size: Math.random() * 2 + 0.5,
                     seed: Math.random() * Math.PI * 2,
-                    speed: Math.random() * 0.003 + 0.001
+                    speed: Math.random() * 0.003 + 0.001, // Twinkle phase speed
+                    moveSpeed: Math.random() * 0.05 + 0.02  // Parallax star scroll
                 });
             }
 
@@ -159,7 +160,8 @@ export class Arena {
                     x: Math.random() * this.width,
                     y: Math.random() * this.height,
                     radius: 40 + Math.random() * 80,
-                    hue: Math.floor(Math.random() * 360)
+                    hue: Math.floor(Math.random() * 360),
+                    moveSpeed: Math.random() * 0.2 + 0.1  // Parallax planet scroll
                 });
             }
         }
@@ -250,6 +252,25 @@ export class Arena {
     update() {
         this.obstacles.forEach(obs => obs.update(this.width, this.height));
         this.obstacles = this.obstacles.filter(obs => !obs.isDead);
+
+        // Parallax for Background Space Objects
+        if (this.theme === 'Space') {
+            this.stars.forEach(s => {
+                s.x -= s.moveSpeed;
+                if (s.x < -s.size) {
+                    s.x = this.width + s.size;
+                    s.y = Math.random() * this.height;
+                }
+            });
+
+            this.planets.forEach(p => {
+                p.x -= p.moveSpeed;
+                if (p.x < -p.radius) {
+                    p.x = this.width + p.radius;
+                    p.y = Math.random() * this.height;
+                }
+            });
+        }
     }
 
     draw(ctx) {
