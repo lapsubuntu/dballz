@@ -1,4 +1,3 @@
-
 import { Vector } from './vector.js';
 import { RACES, generateRaceName } from './races.js'; 
 import { AfterImage } from './particle.js';
@@ -142,6 +141,10 @@ export class Brawler {
         this.wantsToRetreat = false;
         this.tpRequests =[]; 
 
+        // New Ki Attack Focus AI State
+        this.kiAttackFocusTimer = 0; // When > 0, the AI prioritizes ki attacks
+        this.lastKiAttackTimer = 0; // Cooldown between ki attacks during focus
+
         // TAIL SYSTEM - Half-Saiyans do NOT have tails!
         this.hasTail =['Bio-Android', 'Saiyan'].includes(this.raceName);
         this.tail =[];
@@ -238,7 +241,9 @@ export class Brawler {
         this.absorbTimer = 0;
         this.absorbTarget = null;
         this.kiDashTimer = 0;
-        
+        this.kiAttackFocusTimer = 0; // Reset ki attack focus
+        this.lastKiAttackTimer = 0;
+
         // Clear all transformation timers (so Senzu resets states cleanly)
         this.isTransformingSSJ = 0;
         this.ssjTimer = 0;
@@ -303,6 +308,21 @@ export class Brawler {
 
         this.health = this.maxHealth * hpPercent; 
         this.baseBlockCooldown = Math.max(20, 100 - (this.maxSpeed * 10)); 
+    }
+
+    getPowerLevel() {
+        // Base PL Calculation representing canonical strength (Starts at roughly ~700)
+        let hpCalc = this.maxHealth * 5;
+        let dmgCalc = this.getEffectiveDamage() * 150;
+        let spdCalc = this.getEffectiveSpeed() * 30;
+        let kiCalc = this.maxKi * 1; 
+
+        let total = hpCalc + dmgCalc + spdCalc + kiCalc;
+        
+        // Add artificial multiplier based on advanced utility skills
+        let skillMultiplier = 1.0 + (this.equippedSkills.length * 0.05);
+        
+        return Math.floor(total * skillMultiplier);
     }
 
     triggerPunch() {
@@ -533,7 +553,82 @@ export class Brawler {
             }
         }
 
-        // OFFENSIVE SKILL TRIGGERS
+        // Check if opponent is locked in a major action or charging ki
+        let oppIsLocked = opponent.beamTimer > 0 || opponent.chokeTimer > 0 || opponent.barrageTimer > 0 || opponent.isTransformingSSJ > 0 || opponent.absorbTimer > 0 || opponent.dragonThrowTimer > 0 || opponent.wolfRushTimer > 0;
+        let oppIsChargingKi = opponent.isCharging && opponent.ki < opponent.maxKi * 0.9;
+        let idealKiRangeForFocus = dist > 250 && dist < 700; // Optimal range for sustained ki combat
+
+        // --- KI ATTACK FOCUS LOGIC ---
+        if (this.kiAttackFocusTimer > 0) {
+            // During Ki Attack Focus, attempt to maintain a specific range and fire ki blasts
+            let desiredRange = 450; 
+            let rangeDiff = dist - desiredRange;
+            let desiredMovement = toOpp.copy().normalize().mult(currentSpeed * (rangeDiff > 0 ? 0.8 : -0.8)); // Move away if too close, closer if too far
+            steer.add(Vector.sub(desiredMovement, this.vel));
+
+            // Also try to strafe to avoid incoming attacks
+            let toOppNorm = toOpp.copy().normalize();
+            let tangent = new Vector(-toOppNorm.y, toOppNorm.x).mult(this.circleDir);
+            steer.add(tangent.mult(currentSpeed * 0.4)); // Gentle strafing
+
+            // Prioritize firing ki attacks
+            if (this.lastKiAttackTimer <= 0 && this.attackLockout <= 0 && !isLocked && this.ki > 15) { // Need some ki to be active
+                if (this.hasEnergyBeam && this.ki >= 50 && this.beamTimer <= 0 && !oppIsLocked && !oppIsChargingKi) {
+                    this.wantsToBeam = true;
+                    this.lastKiAttackTimer = 120; // Cooldown for next ki attack
+                    if (this.speechTimer <= 0) this.say("HAAAA!", 60);
+                    return steer; // Prioritize beam, immediately apply steering
+                }
+                if (this.hasKiBall && this.kiBallCd <= 0 && this.ki >= 60 && !oppIsLocked) {
+                    this.wantsToKiBall = true;
+                    this.kiBallCd = 360;
+                    this.ki -= 60;
+                    this.lastKiAttackTimer = 90;
+                    if (this.speechTimer <= 0) this.say("Taste this!", 50);
+                    return steer;
+                }
+                if (this.hasKiArrows && this.kiArrowsCd <= 0 && this.ki >= 30 && !oppIsLocked) {
+                    this.wantsToKiArrows = true;
+                    this.kiArrowsCd = 200;
+                    this.ki -= 30;
+                    this.lastKiAttackTimer = 60;
+                    if (this.speechTimer <= 0) this.say("Go!", 40);
+                    return steer;
+                }
+                if (this.hasKiGrenades && this.grenadeCd <= 0 && this.ki >= 40 && !oppIsLocked) {
+                    this.wantsToGrenade = true;
+                    this.grenadeCd = 240;
+                    this.ki -= 40;
+                    this.lastKiAttackTimer = 70;
+                    if (this.speechTimer <= 0) this.say("Dodge this!", 50);
+                    return steer;
+                }
+                // Fallback to basic ki blast if others not available/ready
+                if (this.ki >= 15 && this.wantsToShoot === false) { // Don't spam basic blasts, check if already requested
+                    this.wantsToShoot = true;
+                    this.attackLockout = 15; // Small lockout for basic blast
+                    this.lastKiAttackTimer = 30; // Small cooldown
+                    return steer;
+                }
+            }
+            // If ki is low, maybe charge instead of attacking
+            if (this.ki < 40 && !this.isCharging) {
+                this.isCharging = true;
+                this.kiAttackFocusTimer = 0; // Exit focus to charge
+                return steer;
+            }
+
+        } else if (Math.random() < 0.006 && idealKiRangeForFocus && this.ki > 70 && !isThreat && !oppIsLocked && !oppIsChargingKi && !isLocked && this.attackLockout <= 0) {
+            // Chance to enter Ki Attack Focus when conditions are right
+            this.kiAttackFocusTimer = 180 + Math.random() * 120; // 3-5 seconds of focus
+            this.circleDir = Math.random() > 0.5 ? 1 : -1; // Randomize strafe direction for focus movement
+            if (this.speechTimer <= 0) this.say("You can't hide!", 60);
+            return steer; // Do nothing else this frame
+        }
+        // --- END KI ATTACK FOCUS LOGIC ---
+
+
+        // OFFENSIVE SKILL TRIGGERS (non-ki)
         if (!isThreat && this.isDodging <= 0) {
             
             // STR: Dragon Throw
@@ -542,7 +637,7 @@ export class Brawler {
                 this.dragonThrowCd = 500;
                 this.dragonThrowTarget = opponent;
                 this.attackLockout = 60;
-                this.say(["Get out of here!", "Spin cycle!"][Math.floor(Math.random() * 2)], 60);
+                if (this.speechTimer <= 0) this.say(["Get out of here!", "Spin cycle!"][Math.floor(Math.random() * 2)], 60);
                 return steer;
             }
 
@@ -552,7 +647,7 @@ export class Brawler {
                 this.chokeCd = 400;
                 this.chokedTarget = opponent;
                 this.attackLockout = 50;
-                this.say(["Gotcha!", "You're mine!"][Math.floor(Math.random() * 2)], 50);
+                if (this.speechTimer <= 0) this.say(["Gotcha!", "You're mine!"][Math.floor(Math.random() * 2)], 50);
                 return steer;
             }
 
@@ -562,7 +657,7 @@ export class Brawler {
                 this.wolfRushCd = 500;
                 this.wolfRushTarget = opponent;
                 this.attackLockout = 80;
-                this.say("Wolf Rush!", 60);
+                if (this.speechTimer <= 0) this.say("Wolf Rush!", 60);
                 return steer;
             }
 
@@ -571,7 +666,7 @@ export class Brawler {
                 this.barrageTimer = 60;
                 this.barrageCd = 300;
                 this.attackLockout = 60;
-                this.say("ORA ORA ORA!", 60);
+                if (this.speechTimer <= 0) this.say("ORA ORA ORA!", 60);
                 
                 this.barrageFists =[];
                 for(let i=0; i<8; i++) {
@@ -584,50 +679,12 @@ export class Brawler {
                 }
                 return steer;
             }
-
-            // KI: Beam
-            if (this.hasEnergyBeam && this.ki >= 50 && this.attackLockout <= 0 && dist < 600) {
-                let beamChance = dist > 250 ? 0.015 : 0.005; 
-                if (Math.random() < beamChance) {
-                    this.wantsToBeam = true;
-                    return steer; 
-                }
-            }
             
-            // KI: Ki Ball
-            if (this.hasKiBall && this.kiBallCd <= 0 && this.ki >= 60 && dist > 200 && this.attackLockout <= 0) {
-                if (Math.random() < 0.01) {
-                    this.kiBallCd = 360;
-                    this.ki -= 60;
-                    this.wantsToKiBall = true;
-                    return steer;
-                }
-            }
-
-            // KI: Grenades
-            if (this.hasKiGrenades && this.grenadeCd <= 0 && this.ki >= 40 && dist > 150 && this.attackLockout <= 0) {
-                if (Math.random() < 0.02) {
-                    this.grenadeCd = 240;
-                    this.ki -= 40;
-                    this.wantsToGrenade = true;
-                    return steer;
-                }
-            }
-            
-            // KI: Ki Arrows
-            if (this.hasKiArrows && this.kiArrowsCd <= 0 && this.ki >= 30 && dist > 200 && this.attackLockout <= 0) {
-                if (Math.random() < 0.03) {
-                    this.kiArrowsCd = 200;
-                    this.ki -= 30;
-                    this.wantsToKiArrows = true;
-                    return steer;
-                }
-            }
-
-            if (this.ki < 40 && dist > 300 && Math.random() < 0.05) {
+            // GENERAL KI MECHANICS (outside of ki attack focus)
+            if (this.ki < 40 && dist > 300 && Math.random() < 0.05 && !this.isCharging) {
                 this.isCharging = true;
             } 
-            else if (this.ki >= 15 && dist > 180 && Math.random() < 0.03 && this.attackLockout <= 0) {
+            else if (this.ki >= 15 && dist > 180 && Math.random() < 0.03 && this.attackLockout <= 0 && !this.wantsToShoot) {
                 this.wantsToShoot = true;
                 this.attackLockout = 15;
             }
@@ -692,6 +749,10 @@ export class Brawler {
         if (this.stunTimer > 0) this.stunTimer--;
         if (this.tpCooldown > 0) this.tpCooldown--;
         
+        // Ki Attack Focus timers
+        if (this.kiAttackFocusTimer > 0) this.kiAttackFocusTimer--;
+        if (this.lastKiAttackTimer > 0) this.lastKiAttackTimer--;
+
         // Cooldowns
         if (this.chokeCd > 0) this.chokeCd--;
         if (this.dragonThrowCd > 0) this.dragonThrowCd--;
@@ -943,8 +1004,8 @@ export class Brawler {
 
         let hasAura = this.isCharging || this.kiDashTimer > 0 || this.beamTimer > 0 || 
                       this.fssjTimer > 0 || this.kaiokenTimer > 0 || this.isTransformingSSJ > 0 || 
-                      this.ssjTimer > 0 || this.powerBoostTimer > 0;
-        
+                      this.ssjTimer > 0 || this.powerBoostTimer > 0 || this.kiAttackFocusTimer > 0; // Added Ki Attack Focus
+
         if (hasAura) {
             ctx.save();
             let pulse = Math.sin(Date.now() / 50) * 5;
@@ -968,7 +1029,11 @@ export class Brawler {
                 aWidth = 4;
             } else if (this.kiDashTimer > 0) {
                 aWidth = 5;
+            } else if (this.kiAttackFocusTimer > 0) { // New aura for Ki Attack Focus
+                aColor = 'rgba(0, 116, 217, 0.8)';
+                aWidth = 3;
             }
+
 
             ctx.beginPath();
             ctx.arc(this.pos.x, this.pos.y, auraSize, 0, Math.PI * 2);

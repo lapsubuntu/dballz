@@ -1,4 +1,3 @@
-
 import { state } from './state.js';
 import { ENEMY_COLORS, STYLES } from './config.js';
 import { Vector } from './vector.js';
@@ -53,6 +52,7 @@ export function enterHub() {
     }
     
     state.enemyBrawler = null; 
+    state.fairPlayTimer = 0; // Reset fair play timer
     
     updateProfileUI();
     state.isPlaying = true;
@@ -60,7 +60,7 @@ export function enterHub() {
 }
 
 export function spawnEnemy() {
-    let spawnX = state.blueBrawler.pos.x > width / 2 ? width / 4 : (width / 4) * 3;
+    let spawnX = width + 100; // Generate offscreen safely
     let spawnY = height / 4 + Math.random() * (height / 2);
 
     // Check Revenge Queue
@@ -124,7 +124,8 @@ export function startZenkaiBattle() {
     document.getElementById('ui-layer').classList.add('hidden');
     document.getElementById('zenkai-prompt').classList.add('hidden');
 
-    state.currentMode = 'ZENKAI';
+    state.currentMode = 'INTRO';
+    state.introTimer = 180; // 3 Seconds
     
     let selectedTheme = Math.random() > 0.5 ? 'Desert' : 'Space';
     state.currentArena = new Arena(selectedTheme, width, height);
@@ -133,24 +134,24 @@ export function startZenkaiBattle() {
     state.kiBlasts =[];
     state.homingBlasts =[];
     state.kiBalls =[];
-    state.kiGrenades = [];
+    state.kiGrenades =[];
     state.beams =[];
 
-    state.blueBrawler.pos = new Vector(width / 4, height / 2);
+    // Place them cleanly on edges to walk in
+    state.blueBrawler.pos = new Vector(state.blueBrawler.radius, height / 2);
     state.blueBrawler.vel.mult(0);
+    state.blueBrawler.lookTarget = new Vector(width/2, height/2); // Look Center
     state.blueBrawler.fullRestore();
 
-    let spawnX = (width / 4) * 3;
-    let spawnY = height / 4 + Math.random() * (height / 2);
-    state.enemyBrawler.pos = new Vector(spawnX, spawnY);
+    state.enemyBrawler.pos = new Vector(width - state.enemyBrawler.radius, height / 2);
     state.enemyBrawler.vel.mult(0);
+    state.enemyBrawler.lookTarget = new Vector(width/2, height/2); // Look Center
 
+    state.fairPlayTimer = 0; // Reset fair play timer
+    
     updateProfileUI();
     state.isPlaying = true;
-    logCombat(state.enemyBrawler.isRevenge ? 'Revenge Battle: Survive!' : 'Zenkai Battle: Fight!');
-    
-    state.blueBrawler.say("Let's go!", 80);
-    state.enemyBrawler.say("I'll crush you!", 80);
+    logCombat(state.enemyBrawler.isRevenge ? 'Revenge Battle! Get ready...' : 'A new challenger appears...');
 }
 
 export function triggerWin(isAbsorb = false) {
@@ -175,6 +176,8 @@ export function triggerWin(isAbsorb = false) {
 // CORE ENGINE LOOP
 // ========================
 
+let lastKiAttackTime = 0; // Track time since any ki attack by player or enemy
+
 function updateGameLogic() {
     if (!state.isPlaying) return;
 
@@ -185,12 +188,121 @@ function updateGameLogic() {
 
     state.currentArena.update();
 
+    // INTRO WALKING SEQUENCE
+    if (state.currentMode === 'INTRO') {
+        state.introTimer--;
+        
+        let p1Target = new Vector(width / 4, height / 2);
+        let p2Target = new Vector((width / 4) * 3, height / 2);
+        
+        let desired1 = Vector.sub(p1Target, state.blueBrawler.pos);
+        if (desired1.mag() > 0) desired1.normalize().mult(state.blueBrawler.maxSpeed * 0.5); 
+        let steer1 = Vector.sub(desired1, state.blueBrawler.vel).limit(state.blueBrawler.maxForce);
+        state.blueBrawler.applyForce(steer1);
+        
+        let desired2 = Vector.sub(p2Target, state.enemyBrawler.pos);
+        if (desired2.mag() > 0) desired2.normalize().mult(state.enemyBrawler.maxSpeed * 0.5); 
+        let steer2 = Vector.sub(desired2, state.enemyBrawler.vel).limit(state.enemyBrawler.maxForce);
+        state.enemyBrawler.applyForce(steer2);
+        
+        state.blueBrawler.lookTarget = state.enemyBrawler.pos.copy();
+        state.enemyBrawler.lookTarget = state.blueBrawler.pos.copy();
+        
+        state.blueBrawler.update(width, height);
+        state.enemyBrawler.update(width, height);
+        
+        if (state.introTimer <= 0) {
+            state.currentMode = 'ZENKAI';
+            state.blueBrawler.say("Let's go!", 80);
+            state.enemyBrawler.say("I'll crush you!", 80);
+        }
+        return; // Bypass normal combat AI
+    }
+
     const activeBrawlers =[state.blueBrawler, state.enemyBrawler].filter(b => b);
     const allProjectiles =[...state.kiBlasts, ...state.homingBlasts, ...state.kiBalls, ...state.kiGrenades, ...state.beams];
+
+    // --- FAIR PLAY KI ATTACK MOMENTS ---
+    if (state.currentMode === 'ZENKAI') {
+        state.fairPlayTimer--;
+
+        // Trigger a fair play moment if no ki attacks for a while
+        if (Date.now() - lastKiAttackTime > 8000 && state.fairPlayTimer <= 0 && state.blueBrawler && state.enemyBrawler && !state.blueBrawler.isDead && !state.enemyBrawler.isDead) {
+            if (Math.random() < 0.05) { // 5% chance every 8 seconds of no ki attacks
+                state.fairPlayTimer = 240; // Force ki focus for 4 seconds
+                logCombat("Ranged exchange initiated!");
+                state.blueBrawler.say("Let's test our power!", 60);
+                state.enemyBrawler.say("Foolish!", 60);
+            }
+        }
+
+        if (state.fairPlayTimer > 0 && state.blueBrawler && state.enemyBrawler) {
+            // Force both into Ki Attack Focus
+            state.blueBrawler.kiAttackFocusTimer = Math.max(state.blueBrawler.kiAttackFocusTimer, state.fairPlayTimer + 10);
+            state.enemyBrawler.kiAttackFocusTimer = Math.max(state.enemyBrawler.kiAttackFocusTimer, state.fairPlayTimer + 10);
+        }
+    }
+    // --- END FAIR PLAY ---
+
 
     activeBrawlers.forEach(b => {
         if (b.isDead) return;
         let opponent = b.isPlayer ? state.enemyBrawler : state.blueBrawler;
+
+        // --- ACTIVE GRAB SKILLS LOGIC ---
+        // These used to cause a 'return;' early, skipping rest of game logic.
+        // Now, their effects are processed here, allowing other brawlers and projectiles to update.
+        if (b.chokeTimer > 0 && b.chokedTarget && !b.chokedTarget.isDead) {
+            // Keep target close to the chokester
+            let grabOffset = b.lookDir.copy().mult(b.radius + b.chokedTarget.radius * 0.7);
+            b.chokedTarget.pos = Vector.add(b.pos, grabOffset);
+            b.chokedTarget.vel.mult(0); // Stop target movement
+            b.chokedTarget.stunTimer = Math.max(b.chokedTarget.stunTimer, 2); // Keep target stunned
+
+            // Apply continuous damage
+            if (b.chokeTimer % 5 === 0) { // Damage tick every 5 frames
+                b.chokedTarget.health -= b.getEffectiveDamage() * 0.15; // Small damage tick
+                spawnExplosion(b.chokedTarget.pos.x, b.chokedTarget.pos.y, b.chokedTarget.color, 2, 0.5);
+                state.screenShake = Math.max(state.screenShake, 1);
+            }
+
+            if (b.chokeTimer === 1) { // Final blast at the end
+                let blastDir = b.lookDir.copy().mult(15);
+                b.chokedTarget.vel.add(blastDir.mult(b.knockback * 0.2)); // Apply knockback
+                b.chokedTarget.health -= b.getEffectiveDamage() * 5; // Final damage burst
+                spawnExplosion(b.chokedTarget.pos.x, b.chokedTarget.pos.y, b.chokedTarget.color, 20, 3);
+                state.screenShake = Math.max(state.screenShake, 10);
+                logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} blasts target after Choke!`);
+                b.chokedTarget = null; // Release target
+            }
+        }
+
+        if (b.dragonThrowTimer > 0 && b.dragonThrowTarget && !b.dragonThrowTarget.isDead) {
+            // Keep target close and spin it
+            let spinPhase = (b.dragonThrowTimer / 60) * Math.PI * 4; // Spin multiple times over duration
+            let offsetAngle = Math.atan2(b.lookDir.y, b.lookDir.x) + spinPhase;
+            let grabOffset = new Vector(Math.cos(offsetAngle), Math.sin(offsetAngle)).mult(b.radius + b.dragonThrowTarget.radius * 1.0);
+            b.dragonThrowTarget.pos = Vector.add(b.pos, grabOffset);
+            b.dragonThrowTarget.vel.mult(0); // Stop target movement
+            b.dragonThrowTarget.stunTimer = Math.max(b.dragonThrowTarget.stunTimer, 2); // Keep target stunned
+
+            // Visual: Squish/rotate target to emphasize spin
+            b.dragonThrowTarget.squishX = 0.8 + Math.sin(spinPhase * 2) * 0.2;
+            b.dragonThrowTarget.squishY = 1.2 - Math.sin(spinPhase * 2) * 0.2;
+            b.dragonThrowTarget.squishAngle = offsetAngle + Math.PI / 2; // Rotate target body with throw
+
+            if (b.dragonThrowTimer === 1) { // Final throw
+                let throwDir = b.lookDir.copy().mult(1); // Throw in brawler's forward direction
+                b.dragonThrowTarget.vel.add(throwDir.mult(b.knockback * 0.8)); // Apply heavy knockback
+                b.dragonThrowTarget.health -= b.getEffectiveDamage() * 8; // Burst damage
+                spawnExplosion(b.dragonThrowTarget.pos.x, b.dragonThrowTarget.pos.y, b.dragonThrowTarget.color, 30, 4);
+                state.screenShake = Math.max(state.screenShake, 15);
+                logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} throws target with Dragon Throw!`);
+                b.dragonThrowTarget = null; // Release target
+            }
+        }
+        // --- END ACTIVE GRAB SKILLS LOGIC ---
+
 
         // --- BURST AUTO-REFLEX SYSTEM ---
         if (b.hasBurst && b.burstCd <= 0 && b.ki >= 15) {
@@ -298,7 +410,8 @@ function updateGameLogic() {
             b.ki -= 15; b.wantsToShoot = false;
             let spawnPos = Vector.add(b.pos, b.lookDir.copy().mult(b.radius + 15));
             state.kiBlasts.push(new KiBlast(spawnPos.x, spawnPos.y, b.lookDir, b.color, b.isPlayer));
-            if (Math.random() < 0.3) b.say(["Take this!", "Ha!"][Math.floor(Math.random() * 2)], 30);
+            if (Math.random() < 0.3 && b.speechTimer <= 0) b.say(["Take this!", "Ha!"][Math.floor(Math.random() * 2)], 30);
+            lastKiAttackTime = Date.now();
         }
 
         if (b.wantsToGrenade && opponent) {
@@ -308,8 +421,9 @@ function updateGameLogic() {
                 let spawnPos = Vector.add(b.pos, toOpp.copy().mult(b.radius + 15));
                 state.kiGrenades.push(new KiGrenade(spawnPos.x, spawnPos.y, toOpp, b.color, b.isPlayer));
             }
-            b.say("Dodge this!", 50);
+            if (b.speechTimer <= 0) b.say("Dodge this!", 50);
             logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} scattered a Grenade Barrage!`);
+            lastKiAttackTime = Date.now();
         }
 
         if (b.wantsToKiArrows && opponent) {
@@ -319,24 +433,27 @@ function updateGameLogic() {
                 let spawnPos = Vector.add(b.pos, toOpp.copy().mult(b.radius + 15));
                 state.homingBlasts.push(new HomingKiBlast(spawnPos.x, spawnPos.y, toOpp.copy().rotate(i * 0.5), b.color, b.isPlayer, opponent));
             }
-            b.say("Go!", 40);
+            if (b.speechTimer <= 0) b.say("Go!", 40);
             logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} fired Ki Arrows!`);
+            lastKiAttackTime = Date.now();
         }
 
         if (b.wantsToKiBall) {
             b.wantsToKiBall = false;
             let spawnPos = Vector.add(b.pos, b.lookDir.copy().mult(b.radius + 20));
             state.kiBalls.push(new KiBall(spawnPos.x, spawnPos.y, b.lookDir, b.color, b.isPlayer));
-            b.say("Have a taste of this!", 60);
+            if (b.speechTimer <= 0) b.say("Have a taste of this!", 60);
             logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} threw a Ki Ball!`);
+            lastKiAttackTime = Date.now();
         }
 
         if (b.wantsToBeam && b.ki >= 50) {
             b.ki -= 50; b.wantsToBeam = false; b.beamTimer = 60; b.attackLockout = 60;
             state.beams.push(new EnergyBeam(b));
-            b.say("HAAAAAA!!", 80);
+            if (b.speechTimer <= 0) b.say("HAAAAAA!!", 80);
             logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} fired an ENERGY BEAM!`);
             state.screenShake = Math.max(state.screenShake, 8);
+            lastKiAttackTime = Date.now();
         }
     });
 
@@ -438,22 +555,47 @@ function updateGameLogic() {
     for (let i = 0; i < state.beams.length; i++) {
         for (let j = i + 1; j < state.beams.length; j++) {
             let b1 = state.beams[i]; let b2 = state.beams[j];
-            if (b1.brawler !== b2.brawler) {
-                let p0 = b1.getStartPos(); let p1 = b1.getRawEndPos();
-                let p2 = b2.getStartPos(); let p3 = b2.getRawEndPos();
-                let intersect = getSegmentIntersection(p0, p1, p2, p3);
+            
+            // Ensure beams are from different brawlers and active
+            if (b1.brawler === b2.brawler || !b1.active || !b2.active) continue;
 
-                if (!intersect && Vector.dist(p0, p2) < b1.currentLength + b2.currentLength && b1.brawler.lookDir.dot(b2.brawler.lookDir) < -0.5) {
+            let p0 = b1.getStartPos(); let p1 = b1.getRawEndPos();
+            let p2 = b2.getStartPos(); let p3 = b2.getRawEndPos();
+            
+            let intersect = getSegmentIntersection(p0, p1, p2, p3);
+            let validClash = false;
+
+            // Check if brawlers are facing each other
+            let b1ToB2 = Vector.sub(b2.brawler.pos, b1.brawler.pos).normalize();
+            let b2ToB1 = Vector.sub(b1.brawler.pos, b2.brawler.pos).normalize();
+            
+            let b1FacingB2 = b1.brawler.lookDir.dot(b1ToB2) > 0.6; // Brawler 1 is looking towards Brawler 2
+            let b2FacingB1 = b2.brawler.lookDir.dot(b2ToB1) > 0.6; // Brawler 2 is looking towards Brawler 1
+
+            // Check if beams are coming from opposite directions
+            let beamsOpposite = b1.brawler.lookDir.dot(b2.brawler.lookDir) < -0.5;
+
+            if (intersect) {
+                // Direct intersection, and brawlers/beams are opposing
+                if (b1FacingB2 && b2FacingB1 && beamsOpposite) {
+                    validClash = true;
+                }
+            } else {
+                // No strict intersection but potentially overlapping and opposing
+                if (Vector.dist(p0, p2) < b1.currentLength + b2.currentLength && b1FacingB2 && b2FacingB1 && beamsOpposite) {
+                    // Calculate a pseudo-intersection point for visual effect
                     let ratio = b1.currentLength / (b1.currentLength + b2.currentLength);
                     intersect = Vector.add(p0, Vector.sub(p2, p0).mult(ratio));
+                    validClash = true;
                 }
-                if (intersect) {
-                    b1.clashPoint = intersect; b2.clashPoint = intersect;
-                    spawnExplosion(intersect.x, intersect.y, '#FFFFFF', 3, 2);
-                    spawnExplosion(intersect.x, intersect.y, b1.color, 2, 3);
-                    spawnExplosion(intersect.x, intersect.y, b2.color, 2, 3);
-                    state.screenShake = Math.max(state.screenShake, 5);
-                }
+            }
+
+            if (validClash && intersect) {
+                b1.clashPoint = intersect; b2.clashPoint = intersect;
+                spawnExplosion(intersect.x, intersect.y, '#FFFFFF', 3, 2);
+                spawnExplosion(intersect.x, intersect.y, b1.color, 2, 3);
+                spawnExplosion(intersect.x, intersect.y, b2.color, 2, 3);
+                state.screenShake = Math.max(state.screenShake, 5);
             }
         }
     }
@@ -577,6 +719,46 @@ function gameLoop() {
     state.kiGrenades.forEach(g => g.draw(ctx));
     state.beams.forEach(b => b.draw(ctx));
     state.particles.forEach(p => p.draw(ctx));
+
+    // --- RENDER VS BATTLE INTRO UI OVERLAY ---
+    if (state.currentMode === 'INTRO') {
+        ctx.save();
+        let textY = height - 80;
+        
+        let slideOffset = 0;
+        if (state.introTimer > 150) {
+            slideOffset = (state.introTimer - 150) * 10; // Slide up from bottom
+        } else if (state.introTimer < 30) {
+            slideOffset = (30 - state.introTimer) * 10; // Slide back down offscreen
+        }
+        
+        ctx.translate(0, slideOffset);
+        
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.fillRect(0, textY - 50, width, 100);
+        
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        ctx.font = 'bold 40px Arial';
+        ctx.fillStyle = '#0074D9';
+        ctx.fillText(`P1: ${state.blueBrawler.name}`, width / 2 - 250, textY - 10);
+        
+        ctx.font = 'bold 50px Arial';
+        ctx.fillStyle = '#FFDC00';
+        ctx.fillText("VS", width / 2, textY);
+        
+        ctx.font = 'bold 40px Arial';
+        ctx.fillStyle = state.enemyBrawler.color;
+        ctx.fillText(state.enemyBrawler.name, width / 2 + 250, textY - 10);
+        
+        ctx.font = '20px Arial';
+        ctx.fillStyle = '#AAAAAA';
+        ctx.fillText(`PL: ${state.blueBrawler.getPowerLevel().toLocaleString()}`, width / 2 - 250, textY + 25);
+        ctx.fillText(`PL: ${state.enemyBrawler.getPowerLevel().toLocaleString()}`, width / 2 + 250, textY + 25);
+        
+        ctx.restore();
+    }
 
     ctx.restore();
     requestAnimationFrame(gameLoop);

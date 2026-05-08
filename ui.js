@@ -1,5 +1,3 @@
-
-
 import { state } from './state.js';
 import { UPGRADES } from './upgrades.js';
 import { getEquippedSkillIDs, renderSkillTree, resetSkillTree } from './skills.js';
@@ -17,6 +15,7 @@ export function updateProfileUI() {
     
     document.getElementById('ui-race').innerText = state.blueBrawler.raceName;
     document.getElementById('ui-style').innerText = state.blueBrawler.style;
+    document.getElementById('ui-pl').innerText = state.blueBrawler.getPowerLevel().toLocaleString(); // Added Power Level
     
     // Update Alignment Details
     let alignPercent = 50 + (state.playerAlignment / 2); // -100 -> 0%, +100 -> 100%
@@ -96,16 +95,12 @@ export function showRaceSelect() {
 }
 
 export function calculateWinChance(player, enemy) {
-    let pPower = player.maxHealth * player.getEffectiveDamage() * player.getEffectiveSpeed();
-    let ePower = enemy.maxHealth * enemy.getEffectiveDamage() * enemy.getEffectiveSpeed();
+    // Utilize the new getPowerLevel logic!
+    let pPower = player.getPowerLevel();
+    let ePower = enemy.getPowerLevel();
     
-    pPower *= (1 + player.equippedSkills.length * 0.15);
     pPower *= (1 + (state.senzuBeans * 0.2)); 
     
-    ePower *= (1 + enemy.equippedSkills.length * 0.15);
-    
-    if (enemy.isRevenge) ePower *= 1.3;
-
     let ratio = pPower / (pPower + ePower);
     let percent = Math.floor(ratio * 100);
     
@@ -141,9 +136,11 @@ export function promptZenkaiBattle() {
     let hideHP = !state.enemyBrawler.isRevenge && state.score >= 2 && Math.random() > 0.5;
     let hideDmg = !state.enemyBrawler.isRevenge && state.score >= 4 && Math.random() > 0.4;
     
+    // Replaced Base Dmg explicitly with our shiny new Power Level readout
     infoBox.innerHTML = `
         <p>Race: <span>${state.enemyBrawler.raceName}</span></p>
         <p>Style: <span>${state.enemyBrawler.style}</span></p>
+        <p>Power Level: <span>${state.enemyBrawler.getPowerLevel().toLocaleString()}</span></p>
         <p>Est. HP: <span>${hideHP ? '???' : Math.floor(state.enemyBrawler.maxHealth)}</span></p>
         <p>Est. Dmg: <span>${hideDmg ? '???' : state.enemyBrawler.baseDamage.toFixed(1)}</span></p>
         <div class="win-chance" style="color: ${winChance >= 50 ? '#2ECC40' : '#FF4136'}">
