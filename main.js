@@ -1,5 +1,4 @@
 
-
 import { state } from './state.js';
 import { ENEMY_COLORS, STYLES } from './config.js';
 import { Vector } from './vector.js';
@@ -35,12 +34,12 @@ export function enterHub() {
     
     state.currentArena = new Arena('Space', width, height);
     
-    state.particles = [];
+    state.particles =[];
     state.kiBlasts =[];
-    state.homingBlasts = [];
+    state.homingBlasts =[];
     state.kiBalls = [];
     state.kiGrenades =[];
-    state.beams = [];
+    state.beams =[];
 
     if (!state.blueBrawler) {
         let style = STYLES[Math.floor(Math.random() * STYLES.length)];
@@ -130,9 +129,9 @@ export function startZenkaiBattle() {
     let selectedTheme = Math.random() > 0.5 ? 'Desert' : 'Space';
     state.currentArena = new Arena(selectedTheme, width, height);
     
-    state.particles = [];
+    state.particles =[];
     state.kiBlasts =[];
-    state.homingBlasts = [];
+    state.homingBlasts =[];
     state.kiBalls =[];
     state.kiGrenades = [];
     state.beams =[];
@@ -149,6 +148,9 @@ export function startZenkaiBattle() {
     updateProfileUI();
     state.isPlaying = true;
     logCombat(state.enemyBrawler.isRevenge ? 'Revenge Battle: Survive!' : 'Zenkai Battle: Fight!');
+    
+    state.blueBrawler.say("Let's go!", 80);
+    state.enemyBrawler.say("I'll crush you!", 80);
 }
 
 export function triggerWin(isAbsorb = false) {
@@ -183,7 +185,7 @@ function updateGameLogic() {
 
     state.currentArena.update();
 
-    const activeBrawlers = [state.blueBrawler, state.enemyBrawler].filter(b => b);
+    const activeBrawlers =[state.blueBrawler, state.enemyBrawler].filter(b => b);
     const allProjectiles =[...state.kiBlasts, ...state.homingBlasts, ...state.kiBalls, ...state.kiGrenades, ...state.beams];
 
     activeBrawlers.forEach(b => {
@@ -214,6 +216,7 @@ function updateGameLogic() {
                 b.burstTimer = 15;
                 b.burstCd = 300;
                 b.ki -= 15;
+                b.say("Get away!", 40);
                 logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} AUTO-BURST deflected incoming attack!`);
             }
         }
@@ -250,6 +253,7 @@ function updateGameLogic() {
         // (Transformation logics remain inside brawler instance tick processing)
         if (b.wantsToSSJ) {
             b.wantsToSSJ = false; b.usedSSJ = true; b.ki = 0; b.isTransformingSSJ = 90; 
+            b.say("This ends NOW!", 90);
             logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} is transforming...`);
         }
         if (b.isTransformingSSJ > 0) {
@@ -257,22 +261,27 @@ function updateGameLogic() {
             if (opponent && Vector.dist(opponent.pos, b.pos) < 300) opponent.vel.add(Vector.sub(opponent.pos, b.pos).normalize().mult(1.5)); 
             if (b.isTransformingSSJ === 1) {
                 b.ssjTimer = 1800; spawnExplosion(b.pos.x, b.pos.y, '#FFDC00', 50, 4);
-                state.screenShake = Math.max(state.screenShake, 20); logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} SUPER SAIYAN!`);
+                state.screenShake = Math.max(state.screenShake, 20); 
+                b.say("HAAAAAA!!", 100);
+                logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} SUPER SAIYAN!`);
             }
         }
         if (b.wantsToPowerBoost) {
             b.wantsToPowerBoost = false; b.usedPowerBoost = true; b.powerBoostTimer = 1200; 
             spawnExplosion(b.pos.x, b.pos.y, '#FFFFFF', 30, 2); state.screenShake = Math.max(state.screenShake, 10);
+            b.say("Power Boost!", 60);
             logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} activated POWER BOOST!`);
         }
         if (b.wantsToFSSJ) {
             b.wantsToFSSJ = false; b.usedFSSJ = true; b.fssjTimer = 1200; 
             spawnExplosion(b.pos.x, b.pos.y, '#FF8C00', 30, 2); state.screenShake = Math.max(state.screenShake, 10);
+            b.say("Haaaa!", 60);
             logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} FALSE SUPER SAIYAN!`);
         }
         if (b.wantsToKaioken) {
             b.wantsToKaioken = false; b.usedKaioken = true; b.kaiokenTimer = 900; 
             spawnExplosion(b.pos.x, b.pos.y, '#FF0000', 20, 2); state.screenShake = Math.max(state.screenShake, 8);
+            b.say("KAIOKEN!", 60);
             logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} KAIOKEN x5!`);
         }
 
@@ -289,6 +298,7 @@ function updateGameLogic() {
             b.ki -= 15; b.wantsToShoot = false;
             let spawnPos = Vector.add(b.pos, b.lookDir.copy().mult(b.radius + 15));
             state.kiBlasts.push(new KiBlast(spawnPos.x, spawnPos.y, b.lookDir, b.color, b.isPlayer));
+            if (Math.random() < 0.3) b.say(["Take this!", "Ha!"][Math.floor(Math.random() * 2)], 30);
         }
 
         if (b.wantsToGrenade && opponent) {
@@ -298,6 +308,7 @@ function updateGameLogic() {
                 let spawnPos = Vector.add(b.pos, toOpp.copy().mult(b.radius + 15));
                 state.kiGrenades.push(new KiGrenade(spawnPos.x, spawnPos.y, toOpp, b.color, b.isPlayer));
             }
+            b.say("Dodge this!", 50);
             logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} scattered a Grenade Barrage!`);
         }
 
@@ -308,6 +319,7 @@ function updateGameLogic() {
                 let spawnPos = Vector.add(b.pos, toOpp.copy().mult(b.radius + 15));
                 state.homingBlasts.push(new HomingKiBlast(spawnPos.x, spawnPos.y, toOpp.copy().rotate(i * 0.5), b.color, b.isPlayer, opponent));
             }
+            b.say("Go!", 40);
             logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} fired Ki Arrows!`);
         }
 
@@ -315,12 +327,14 @@ function updateGameLogic() {
             b.wantsToKiBall = false;
             let spawnPos = Vector.add(b.pos, b.lookDir.copy().mult(b.radius + 20));
             state.kiBalls.push(new KiBall(spawnPos.x, spawnPos.y, b.lookDir, b.color, b.isPlayer));
+            b.say("Have a taste of this!", 60);
             logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} threw a Ki Ball!`);
         }
 
         if (b.wantsToBeam && b.ki >= 50) {
             b.ki -= 50; b.wantsToBeam = false; b.beamTimer = 60; b.attackLockout = 60;
             state.beams.push(new EnergyBeam(b));
+            b.say("HAAAAAA!!", 80);
             logCombat(`${b.isPlayer ? 'P1' : 'Enemy'} fired an ENERGY BEAM!`);
             state.screenShake = Math.max(state.screenShake, 8);
         }
@@ -479,6 +493,8 @@ function updateGameLogic() {
         state.enemyBrawler.attackLockout = 9999;
         state.enemyBrawler.wantsToShoot = false;
         state.enemyBrawler.wantsToBeam = false;
+        
+        state.enemyBrawler.say("Guaaah!!", 120);
         
         showFateSelection();
     }

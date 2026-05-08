@@ -1,3 +1,4 @@
+
 import { Vector } from './vector.js';
 import { RACES, generateRaceName } from './races.js'; 
 import { AfterImage } from './particle.js';
@@ -190,11 +191,20 @@ export class Brawler {
         this.punchTimer = 0;
         this.punchDuration = Math.max(4, this.attackCooldown - 2); 
 
+        // Speech System
+        this.speechText = "";
+        this.speechTimer = 0;
+
         this.history = [];
-        this.afterImages = [];
+        this.afterImages =[];
         
         this.updateStats([]);
         this.health = this.maxHealth; 
+    }
+
+    say(text, duration = 60) {
+        this.speechText = text;
+        this.speechTimer = duration;
     }
 
     fullRestore() {
@@ -203,6 +213,8 @@ export class Brawler {
         this.isDead = false;
         this.vel.mult(0);
         this.acc.mult(0);
+
+        this.speechTimer = 0;
 
         // Clear all negative states
         this.stunTimer = 0;
@@ -404,6 +416,12 @@ export class Brawler {
             // Passive healing and Ki regen in the hub
             this.ki = Math.min(this.maxKi, this.ki + 0.2);
             this.health = Math.min(this.maxHealth, this.health + 0.1);
+
+            // Hub idle speech
+            if (Math.random() < 0.003 && this.speechTimer <= 0) {
+                const idleLines =["Just waiting...", "Need a fight.", "Hmph.", "So quiet.", "Focus."];
+                this.say(idleLines[Math.floor(Math.random() * idleLines.length)], 80);
+            }
             
             return steer.limit(this.maxForce * 0.3);
         }
@@ -524,6 +542,7 @@ export class Brawler {
                 this.dragonThrowCd = 500;
                 this.dragonThrowTarget = opponent;
                 this.attackLockout = 60;
+                this.say(["Get out of here!", "Spin cycle!"][Math.floor(Math.random() * 2)], 60);
                 return steer;
             }
 
@@ -533,6 +552,7 @@ export class Brawler {
                 this.chokeCd = 400;
                 this.chokedTarget = opponent;
                 this.attackLockout = 50;
+                this.say(["Gotcha!", "You're mine!"][Math.floor(Math.random() * 2)], 50);
                 return steer;
             }
 
@@ -542,6 +562,7 @@ export class Brawler {
                 this.wolfRushCd = 500;
                 this.wolfRushTarget = opponent;
                 this.attackLockout = 80;
+                this.say("Wolf Rush!", 60);
                 return steer;
             }
 
@@ -550,6 +571,7 @@ export class Brawler {
                 this.barrageTimer = 60;
                 this.barrageCd = 300;
                 this.attackLockout = 60;
+                this.say("ORA ORA ORA!", 60);
                 
                 this.barrageFists =[];
                 for(let i=0; i<8; i++) {
@@ -656,6 +678,8 @@ export class Brawler {
     }
 
     update(canvasWidth, canvasHeight) {
+        if (this.speechTimer > 0) this.speechTimer--;
+
         if (this.absorbTimer > 0) this.absorbTimer--;
 
         if (this.invulnTimer > 0) this.invulnTimer--;
@@ -1115,5 +1139,58 @@ export class Brawler {
         ctx.textAlign = 'center';
         let labelText = this.isPlayer ? `P1: ${this.name} (${this.raceName} ${this.style})` : `${this.name} (${this.raceName} ${this.style})`; 
         ctx.fillText(labelText, this.pos.x, this.pos.y - this.radius - 28);
+
+        // --- DRAW SPEECH BUBBLE OVER HEAD ---
+        if (this.speechTimer > 0) {
+            ctx.save();
+            ctx.font = 'bold 12px Arial'; 
+            let paddingX = 8;
+            let paddingY = 6;
+            let textMetrics = ctx.measureText(this.speechText);
+            let w = textMetrics.width + paddingX * 2;
+            let h = 20;
+            let bubbleX = this.pos.x - w / 2;
+            let bubbleY = this.pos.y - this.radius - 60; // Placed above the health bar
+
+            if (this.speechTimer < 10) ctx.globalAlpha = this.speechTimer / 10;
+            else ctx.globalAlpha = 0.9; 
+
+            // Draw bubble with pointing tail seamlessly
+            ctx.fillStyle = '#FFFFFF';
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            
+            ctx.beginPath();
+            let r = 6; // border radius
+            // Top and Right
+            ctx.moveTo(bubbleX + r, bubbleY);
+            ctx.lineTo(bubbleX + w - r, bubbleY);
+            ctx.quadraticCurveTo(bubbleX + w, bubbleY, bubbleX + w, bubbleY + r);
+            ctx.lineTo(bubbleX + w, bubbleY + h - r);
+            ctx.quadraticCurveTo(bubbleX + w, bubbleY + h, bubbleX + w - r, bubbleY + h);
+            
+            // Bottom Right -> Tail
+            ctx.lineTo(this.pos.x + 5, bubbleY + h);
+            ctx.lineTo(this.pos.x, bubbleY + h + 8);
+            ctx.lineTo(this.pos.x - 5, bubbleY + h);
+            
+            // Bottom Left -> Top Left
+            ctx.lineTo(bubbleX + r, bubbleY + h);
+            ctx.quadraticCurveTo(bubbleX, bubbleY + h, bubbleX, bubbleY + h - r);
+            ctx.lineTo(bubbleX, bubbleY + r);
+            ctx.quadraticCurveTo(bubbleX, bubbleY, bubbleX + r, bubbleY);
+            ctx.closePath();
+
+            ctx.fill();
+            ctx.stroke();
+
+            // Text
+            ctx.fillStyle = '#000000';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(this.speechText, this.pos.x, bubbleY + h / 2);
+            
+            ctx.restore();
+        }
     }
 }

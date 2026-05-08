@@ -1,5 +1,4 @@
 
-
 import { state } from './state.js';
 import { Vector } from './vector.js';
 import { logCombat } from './ui.js';
@@ -29,16 +28,23 @@ export function calculateHitEffects(attacker, defender, pushDir, hitQuality) {
     if (defender.isBlocking > 0) {
         blocked = true;
         finalDmg *= 0.1; 
+        if (Math.random() < 0.3 && defender.speechTimer <= 0) {
+            defender.say(["Tsk!", "Weak.", "Nice try!"][Math.floor(Math.random() * 3)], 40);
+        }
         logCombat(`${defender.isPlayer ? 'Player' : 'Enemy'} BLOCKED!`);
     } else {
         if (defender.raceName === 'Froster') {
             if (defender.cruelDodgeTimer > 0) {
                 dodged = true;
                 defender.cruelDodgeTimer = 0;
+                if (defender.speechTimer <= 0) {
+                    defender.say(["Missed me!", "Too slow!"][Math.floor(Math.random() * 2)], 40);
+                }
                 logCombat(`${defender.isPlayer ? 'Player' : 'Enemy'} Froster DODGED!`);
             } else if (Math.random() < 0.10) {
                 ignoreKB = true;
                 defender.cruelDodgeTimer = 60; 
+                if (defender.speechTimer <= 0) defender.say("Fools play.", 40);
                 logCombat(`${defender.isPlayer ? 'Player' : 'Enemy'} Froster CRUEL!`);
             }
         }
@@ -67,6 +73,13 @@ export function calculateHitEffects(attacker, defender, pushDir, hitQuality) {
             
             defender.lastHitByStyle = attacker.style;
             if (ignoreKB) kbVec = new Vector(0, 0);
+
+            if (stunFrames > 15 && defender.speechTimer <= 0) {
+                defender.say(["Ugh!", "Gah!", "Guh..."][Math.floor(Math.random() * 3)], 30);
+            }
+            if (isFinisher && attacker.speechTimer <= 0) {
+                attacker.say(["Take this!", "Haaa!", "Down you go!"][Math.floor(Math.random() * 3)], 50);
+            }
         }
     }
 
@@ -83,6 +96,11 @@ export function tryTeleportCounter(defender, attacker, canvasWidth, canvasHeight
         defender.triggerTeleport(tpTarget);
         defender.lookTarget = attacker.pos.copy();
         defender.attackLockout = 0; 
+        
+        if (defender.speechTimer <= 0) {
+            defender.say(["Right here!", "Behind you!", "Too slow!"][Math.floor(Math.random() * 3)], 40);
+        }
+        
         logCombat(`${defender.isPlayer ? 'Player' : 'Enemy'} TELEPORT COUNTER!`);
     }
 }
@@ -97,6 +115,11 @@ export function handleCombat(width, height) {
         state.blueBrawler.vel.sub(state.blueBrawler.lookDir.copy().mult(1));
         state.enemyBrawler.vel.sub(state.enemyBrawler.lookDir.copy().mult(1));
         state.screenShake = Math.max(state.screenShake, 3);
+        
+        if (Math.random() < 0.1) {
+            if (state.blueBrawler.speechTimer <= 0) state.blueBrawler.say("Don't hold back!", 40);
+            if (state.enemyBrawler.speechTimer <= 0) state.enemyBrawler.say("Uaaaaah!", 40);
+        }
         return; 
     }
 
